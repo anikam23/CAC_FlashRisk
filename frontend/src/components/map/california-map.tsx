@@ -6,6 +6,8 @@ import "maplibre-gl/dist/maplibre-gl.css";
 
 import { BASEMAP_STYLE_URL, CALIFORNIA_VIEW } from "@/lib/config";
 
+const MAPLIBRE_WORKER_URL = "/maplibre/maplibre-gl-worker.mjs";
+
 export function CaliforniaMap() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
@@ -13,6 +15,7 @@ export function CaliforniaMap() {
   useEffect(() => {
     if (!containerRef.current) return;
 
+    maplibregl.setWorkerUrl(MAPLIBRE_WORKER_URL);
     const map = new maplibregl.Map({
       container: containerRef.current,
       style: BASEMAP_STYLE_URL,
