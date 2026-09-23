@@ -1,0 +1,53 @@
+# Environment files (templates are committed)
+.env
+.env.*
+!.env.example
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
+npm-debug.log*
+.pnpm-debug.log*
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Caches and downloaded data
+.cache/
+cache/
+data/
+downloads/
+*.nc
+*.nc4
+*.h5
+*.hdf
+*.hdf5
+*.grib
+*.grib2
+*.zarr/
+*.tif
+*.tiff
+
+# Model binaries (bundle JSON files in model/ are committed)
+*.ubj
+*.bin
+*.pkl
+*.joblib
+*.onnx
+*.model
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

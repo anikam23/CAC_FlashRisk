@@ -1,0 +1,111 @@
+{
+  "model_id": "flashrisk-v1",
+  "feature_count": 21,
+  "features": [
+    {
+      "index": 0,
+      "name": "era5_temperature_2m_c",
+      "source": "ERA5-Land"
+    },
+    {
+      "index": 1,
+      "name": "era5_relative_humidity_pct",
+      "source": "ERA5-Land"
+    },
+    {
+      "index": 2,
+      "name": "era5_vpd_kpa",
+      "source": "ERA5-Land"
+    },
+    {
+      "index": 3,
+      "name": "era5_precip_24h_mm",
+      "source": "ERA5-Land"
+    },
+    {
+      "index": 4,
+      "name": "era5_precip_72h_mm",
+      "source": "ERA5-Land"
+    },
+    {
+      "index": 5,
+      "name": "era5_precip_168h_mm",
+      "source": "ERA5-Land"
+    },
+    {
+      "index": 6,
+      "name": "smap_surface_soil_moisture",
+      "source": "NASA SMAP"
+    },
+    {
+      "index": 7,
+      "name": "smap_rootzone_soil_moisture",
+      "source": "NASA SMAP"
+    },
+    {
+      "index": 8,
+      "name": "modis_ndwi",
+      "source": "MODIS"
+    },
+    {
+      "index": 9,
+      "name": "era5_wind_speed_10m_ms",
+      "source": "ERA5-Land"
+    },
+    {
+      "index": 10,
+      "name": "era5_precip_30d_mm",
+      "source": "ERA5-Land"
+    },
+    {
+      "index": 11,
+      "name": "modis_ndvi",
+      "source": "MODIS"
+    },
+    {
+      "index": 12,
+      "name": "season_sin",
+      "source": "computed from flash timestamp"
+    },
+    {
+      "index": 13,
+      "name": "season_cos",
+      "source": "computed from flash timestamp"
+    },
+    {
+      "index": 14,
+      "name": "flash_energy",
+      "source": "GOES-18 GLM"
+    },
+    {
+      "index": 15,
+      "name": "flash_area",
+      "source": "GOES-18 GLM"
+    },
+    {
+      "index": 16,
+      "name": "flash_duration_ms",
+      "source": "GOES-18 GLM"
+    },
+    {
+      "index": 17,
+      "name": "max_group_area",
+      "source": "GOES-18 GLM"
+    },
+    {
+      "index": 18,
+      "name": "max_group_energy",
+      "source": "GOES-18 GLM"
+    },
+    {
+      "index": 19,
+      "name": "group_count",
+      "source": "GOES-18 GLM"
+    },
+    {
+      "index": 20,
+      "name": "max_events_per_group",
+      "source": "GOES-18 GLM"
+    }
+  ]
+}
