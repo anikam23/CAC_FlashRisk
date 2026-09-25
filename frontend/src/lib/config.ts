@@ -6,12 +6,3 @@ export const API_BASE_URL = (
 export const BASEMAP_STYLE_URL =
   process.env.NEXT_PUBLIC_BASEMAP_STYLE_URL ??
   "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json";
-
-export const CALIFORNIA_VIEW = {
-  center: [-119.45, 37.25] as [number, number],
-  zoom: 5.3,
-  bounds: [
-    [-124.6, 32.4],
-    [-114.0, 42.1],
-  ] as [[number, number], [number, number]],
-};

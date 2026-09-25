@@ -2,9 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { Badge } from "@/components/ui/badge";
 import { fetchHealth, type HealthResponse } from "@/lib/api";
-import { API_BASE_URL } from "@/lib/config";
 
 type HealthState =
   | { kind: "checking" }
@@ -42,32 +40,36 @@ export function BackendHealth() {
 
   const dot =
     state.kind === "connected"
-      ? "bg-emerald-400 shadow-[0_0_8px] shadow-emerald-400/70"
+      ? "bg-emerald-400/90 shadow-[0_0_6px] shadow-emerald-400/50"
       : state.kind === "unreachable"
-        ? "bg-red-500 shadow-[0_0_8px] shadow-red-500/70"
-        : "bg-amber-400 animate-pulse";
+        ? "bg-red-400/90"
+        : "animate-pulse bg-amber-300/90";
 
   const label =
+    state.kind === "connected" ? "Online" : state.kind === "unreachable" ? "Offline" : "Checking";
+
+  const detail =
     state.kind === "connected"
-      ? "Backend connected"
+      ? `${state.data.service} ${state.data.version}`
       : state.kind === "unreachable"
-        ? "Backend unreachable"
-        : "Checking backend…";
+        ? state.message
+        : "Checking backend";
 
   return (
-    <div className="flex flex-col gap-1.5" data-testid="backend-health" data-state={state.kind}>
-      <div className="flex items-center gap-2">
-        <span className={`size-2 rounded-full ${dot}`} aria-hidden />
-        <span className="text-sm font-medium">{label}</span>
-        {state.kind === "connected" && (
-          <Badge variant="outline" className="ml-auto font-mono text-[10px]">
-            v{state.data.version}
-          </Badge>
-        )}
-      </div>
-      <p className="truncate font-mono text-[11px] text-muted-foreground">
-        {state.kind === "unreachable" ? state.message : `${API_BASE_URL}/api/health`}
-      </p>
+    <div
+      className="flex shrink-0 items-center gap-2.5"
+      data-testid="backend-health"
+      data-state={state.kind}
+      title={detail}
+    >
+      <span className="text-[10px] font-medium tracking-[0.16em] text-muted-foreground uppercase">
+        Backend
+      </span>
+      <span className="flex items-center gap-1.5 text-xs text-foreground/85">
+        <span className={`size-1.5 rounded-full ${dot}`} aria-hidden />
+        <span>{label}</span>
+      </span>
+      <span className="sr-only">{detail}</span>
     </div>
   );
 }

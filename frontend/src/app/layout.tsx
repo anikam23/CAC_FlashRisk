@@ -13,13 +13,12 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "FlashRisk — California Lightning Ignition Surveillance",
-  description:
-    "Explore GOES-18 GLM lightning flashes over California and estimate wildfire ignition surveillance priority.",
+  title: "FlashRisk — Lightning Ignition Surveillance",
+  description: "California lightning ignition surveillance.",
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0b1018",
+  themeColor: "#10141c",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
@@ -28,7 +27,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="en"
       className={`dark ${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full">{children}</body>
+      <body className="h-full overflow-hidden">{children}</body>
     </html>
   );
 }

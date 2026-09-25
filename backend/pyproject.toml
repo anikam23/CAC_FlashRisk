@@ -5,8 +5,13 @@ description = "FastAPI backend for CAC FlashRisk: GOES-18 GLM flash analysis and
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.141.1",
+    "netcdf4>=1.7.2",
+    "numpy>=2.2.0",
+    "pandas>=2.2.0",
     "pydantic-settings>=2.15.0",
+    "s3fs>=2025.2.0",
     "uvicorn[standard]>=0.53.0",
+    "xarray>=2025.1.0",
 ]
 
 [tool.uv]
@@ -15,6 +20,10 @@ package = false
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+markers = [
+    "integration: live network tests (NOAA S3); excluded from the default suite",
+]
+addopts = "-m 'not integration'"
 
 [dependency-groups]
 dev = [
