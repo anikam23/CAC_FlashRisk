@@ -27,13 +27,13 @@ FastAPI managed with uv.
 - `app/api/routes` — HTTP routes (currently only `GET /api/health`)
 - `app/schemas` — Pydantic models
 - `app/core` — settings (`FLASHRISK_*` environment variables)
-- `app/services/glm` — GOES-18 GLM flash retrieval
-- `app/services/environment` — ERA5-Land, NASA SMAP, and MODIS retrieval
-- `app/services/features` — builds the 21-feature vector
-- `app/services/inference` — loads the frozen XGBoost model and scores
-- `app/services/imagery` — display-only satellite imagery
+- `app/services/glm` — GOES-18 GLM flash retrieval and selected-flash reconstruction
+- `app/services/environment` — ERA5-Land feature retrieval (`era5.py`); SMAP / MODIS later
+- `app/services/features` — builds the 21-feature vector (planned)
+- `app/services/inference` — loads the frozen XGBoost model and scores (planned)
+- `app/services/imagery` — display-only satellite imagery (planned)
 
-Service packages are empty placeholders. Retrieval and matching methodology will be supplied per data source and is not invented here.
+ERA5-Land retrieval is implemented as a reusable backend service with offline physics unit tests and an optional live CDS golden parity test. It is not yet exposed through the Analyze UI.
 
 ## Analysis flow (planned)
 

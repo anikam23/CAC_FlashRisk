@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "FastAPI backend for CAC FlashRisk: GOES-18 GLM flash analysis and frozen XGBoost inference."
 requires-python = ">=3.12"
 dependencies = [
+    "cdsapi>=0.7.0",
     "fastapi>=0.141.1",
     "netcdf4>=1.7.2",
     "numpy>=2.2.0",
@@ -21,7 +22,7 @@ package = false
 testpaths = ["tests"]
 pythonpath = ["."]
 markers = [
-    "integration: live network tests (NOAA S3); excluded from the default suite",
+    "integration: live network tests (NOAA S3 / CDS ERA5); excluded from the default suite",
 ]
 addopts = "-m 'not integration'"
 

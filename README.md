@@ -34,7 +34,7 @@ FlashRisk currently provides a working California map interface, real GOES-18 GL
 | Flash selection & characteristics | Implemented |
 | GLM event reconstruction | Implemented |
 | GLM backend validation / golden tests | Implemented |
-| ERA5-Land environmental retrieval | Under development |
+| ERA5-Land environmental retrieval | Implemented (service + golden test; not wired to Analyze yet) |
 | SMAP soil-moisture retrieval | Under development |
 | MODIS vegetation / moisture retrieval | Under development |
 | Exact 21-feature construction | Under development |
@@ -97,5 +97,26 @@ Optional: copy `frontend/.env.example` to `.env.local` if you need to override t
 | `NEXT_PUBLIC_API_BASE_URL` | frontend | `http://127.0.0.1:8765` |
 | `NEXT_PUBLIC_BASEMAP_STYLE_URL` | frontend | CARTO Dark Matter (no key) |
 | `FLASHRISK_CORS_ORIGINS` | backend | `["http://localhost:3417","http://127.0.0.1:3417"]` |
+| `CDS_API_KEY` | backend `.env` | *(required for ERA5-Land; never commit)* |
 
 Basemap: © OpenStreetMap contributors, © CARTO.
+
+### Backend tests
+
+From `backend/` (default suite excludes live network tests):
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest
+```
+
+ERA5 helpers (fast, offline):
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests/test_era5_helpers.py
+```
+
+ERA5 golden parity against Copernicus CDS (real network; needs `CDS_API_KEY` in `backend/.env`; may take several minutes):
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -m integration tests/test_era5_golden.py -s
+```
