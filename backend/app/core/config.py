@@ -25,6 +25,9 @@ class Settings(BaseSettings):
         default="https://cds.climate.copernicus.eu/api",
         validation_alias="CDS_API_URL",
     )
+    # Google Earth Engine cloud project for SMAP (and later MODIS) retrieval.
+    # Credentials are local developer EE credentials — never committed.
+    ee_project: str | None = Field(default=None, validation_alias="EE_PROJECT")
 
 
 @lru_cache

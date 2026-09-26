@@ -28,12 +28,12 @@ FastAPI managed with uv.
 - `app/schemas` — Pydantic models
 - `app/core` — settings (`FLASHRISK_*` environment variables)
 - `app/services/glm` — GOES-18 GLM flash retrieval and selected-flash reconstruction
-- `app/services/environment` — ERA5-Land feature retrieval (`era5.py`); SMAP / MODIS later
+- `app/services/environment` — ERA5-Land (`era5.py`) and NASA SMAP (`smap.py`); MODIS later
 - `app/services/features` — builds the 21-feature vector (planned)
 - `app/services/inference` — loads the frozen XGBoost model and scores (planned)
 - `app/services/imagery` — display-only satellite imagery (planned)
 
-ERA5-Land retrieval is implemented as a reusable backend service with offline physics unit tests and an optional live CDS golden parity test. It is not yet exposed through the Analyze UI.
+ERA5-Land and SMAP retrieval are implemented as reusable backend services with offline unit tests and optional live golden parity tests. They are not yet exposed through the Analyze UI. SMAP uses Google Earth Engine (`EE_PROJECT`); authenticate EE once locally for the backend Python environment—application code only calls `ee.Initialize(project=...)`.
 
 ## Analysis flow (planned)
 

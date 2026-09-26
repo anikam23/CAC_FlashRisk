@@ -35,7 +35,7 @@ FlashRisk currently provides a working California map interface, real GOES-18 GL
 | GLM event reconstruction | Implemented |
 | GLM backend validation / golden tests | Implemented |
 | ERA5-Land environmental retrieval | Implemented (service + golden test; not wired to Analyze yet) |
-| SMAP soil-moisture retrieval | Under development |
+| SMAP soil-moisture retrieval | Implemented (service + golden test; not wired to Analyze yet) |
 | MODIS vegetation / moisture retrieval | Under development |
 | Exact 21-feature construction | Under development |
 | Frozen XGBoost inference | Under development |
@@ -98,6 +98,7 @@ Optional: copy `frontend/.env.example` to `.env.local` if you need to override t
 | `NEXT_PUBLIC_BASEMAP_STYLE_URL` | frontend | CARTO Dark Matter (no key) |
 | `FLASHRISK_CORS_ORIGINS` | backend | `["http://localhost:3417","http://127.0.0.1:3417"]` |
 | `CDS_API_KEY` | backend `.env` | *(required for ERA5-Land; never commit)* |
+| `EE_PROJECT` | backend `.env` | *(Earth Engine Cloud project for SMAP; never commit secrets)* |
 
 Basemap: © OpenStreetMap contributors, © CARTO.
 
@@ -119,4 +120,22 @@ ERA5 golden parity against Copernicus CDS (real network; needs `CDS_API_KEY` in 
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest -m integration tests/test_era5_golden.py -s
+```
+
+SMAP helpers (fast, offline):
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests/test_smap_helpers.py
+```
+
+One-time Earth Engine developer authentication for this backend environment (not called by app code):
+
+```powershell
+.\.venv\Scripts\earthengine.exe authenticate
+```
+
+SMAP golden parity against Earth Engine (real network; needs `EE_PROJECT` plus prior EE auth):
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -m integration tests/test_smap_golden.py -s
 ```
