@@ -1,4 +1,4 @@
-"""Environmental data retrieval: ERA5-Land, NASA SMAP, and MODIS MOD09GA."""
+"""Environmental data retrieval and offline seasonality features."""
 
 from app.services.environment.era5 import (
     Era5ConfigError,
@@ -19,6 +19,11 @@ from app.services.environment.modis import (
     ModisResult,
     ModisRetrievalError,
     fetch_modis_features,
+)
+from app.services.environment.seasonality import (
+    SeasonalityFeatures,
+    SeasonalityResult,
+    compute_seasonality,
 )
 from app.services.environment.smap import (
     SmapConfigError,
@@ -44,12 +49,15 @@ __all__ = [
     "ModisFeatures",
     "ModisResult",
     "ModisRetrievalError",
+    "SeasonalityFeatures",
+    "SeasonalityResult",
     "SmapConfigError",
     "SmapCoverageError",
     "SmapError",
     "SmapFeatures",
     "SmapResult",
     "SmapRetrievalError",
+    "compute_seasonality",
     "ensure_utc_timestamp",
     "fetch_era5_features",
     "fetch_modis_features",
