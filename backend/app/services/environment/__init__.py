@@ -1,4 +1,4 @@
-"""Environmental data retrieval: ERA5-Land and NASA SMAP (MODIS later)."""
+"""Environmental data retrieval: ERA5-Land, NASA SMAP, and MODIS MOD09GA."""
 
 from app.services.environment.era5 import (
     Era5ConfigError,
@@ -10,6 +10,15 @@ from app.services.environment.era5 import (
     Era5RetrievalError,
     ensure_utc_timestamp,
     fetch_era5_features,
+)
+from app.services.environment.modis import (
+    ModisConfigError,
+    ModisCoverageError,
+    ModisError,
+    ModisFeatures,
+    ModisResult,
+    ModisRetrievalError,
+    fetch_modis_features,
 )
 from app.services.environment.smap import (
     SmapConfigError,
@@ -29,6 +38,12 @@ __all__ = [
     "Era5Features",
     "Era5Result",
     "Era5RetrievalError",
+    "ModisConfigError",
+    "ModisCoverageError",
+    "ModisError",
+    "ModisFeatures",
+    "ModisResult",
+    "ModisRetrievalError",
     "SmapConfigError",
     "SmapCoverageError",
     "SmapError",
@@ -37,5 +52,6 @@ __all__ = [
     "SmapRetrievalError",
     "ensure_utc_timestamp",
     "fetch_era5_features",
+    "fetch_modis_features",
     "fetch_smap_features",
 ]

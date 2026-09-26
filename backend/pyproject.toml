@@ -23,7 +23,7 @@ package = false
 testpaths = ["tests"]
 pythonpath = ["."]
 markers = [
-    "integration: live network tests (NOAA S3 / CDS ERA5 / Earth Engine SMAP); excluded from the default suite",
+    "integration: live network tests (NOAA S3 / CDS ERA5 / Earth Engine SMAP+MODIS); excluded from the default suite",
 ]
 addopts = "-m 'not integration'"
 

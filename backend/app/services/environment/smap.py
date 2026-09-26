@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 
 from app.core.config import get_settings
+from app.services.environment.ee_client import EarthEngineConfigError, initialize_earth_engine
 from app.services.environment.era5 import ensure_utc_timestamp, timestamp_to_utc_datetime
 from app.services.environment.smap_timing import (
     SMAP_HALF_INTERVAL,
@@ -31,7 +32,7 @@ class SmapError(Exception):
     """Base SMAP service error."""
 
 
-class SmapConfigError(SmapError):
+class SmapConfigError(SmapError, EarthEngineConfigError):
     """Missing Earth Engine project / credentials / setup."""
 
 
@@ -63,32 +64,6 @@ class SmapResult:
     collection_id: str = SMAP_COLLECTION_ID
 
 
-_ee_initialized_project: str | None = None
-
-
-def _initialize_earth_engine(project: str) -> None:
-    """Initialize EE for the configured project. Never opens interactive login."""
-    global _ee_initialized_project
-    project = project.strip()
-    if not project:
-        raise SmapConfigError(
-            "EE_PROJECT is not configured. Set EE_PROJECT in backend/.env "
-            "(example: lightning-ignition-research). Never commit credentials."
-        )
-    if _ee_initialized_project == project:
-        return
-    try:
-        ee.Initialize(project=project)
-    except Exception as exc:  # noqa: BLE001 — wrap without interactive Authenticate()
-        raise SmapConfigError(
-            "Earth Engine is not available for this environment. "
-            "Authenticate once locally with the backend Python, then retry "
-            "(production code does not call ee.Authenticate()). "
-            "Also confirm EE_PROJECT is set and your account can access that project."
-        ) from exc
-    _ee_initialized_project = project
-
-
 def fetch_smap_features(
     *,
     flash_time_utc: datetime | pd.Timestamp | str,
@@ -101,8 +76,10 @@ def fetch_smap_features(
         raise SmapConfigError("Flash latitude and longitude must be finite numbers.")
 
     settings = get_settings()
-    project = (settings.ee_project or "").strip()
-    _initialize_earth_engine(project)
+    try:
+        project = initialize_earth_engine(settings.ee_project or "")
+    except EarthEngineConfigError as exc:
+        raise SmapConfigError(str(exc)) from exc
 
     t0 = perf_counter()
     eligible_midpoint = latest_eligible_midpoint(flash_time)
