@@ -7,15 +7,15 @@ Frozen, pre-trained 21-feature XGBoost model used by the backend for inference. 
 | File | Status |
 | --- | --- |
 | `feature_manifest.json` | Present. Exact feature order the model expects. `index` is the 0-based input column. |
-| `model.json` | **Not yet included.** The native XGBoost JSON artifact is supplied later and copied here unchanged. |
-
-Additional bundle files (output spec, model card, checksums) will be added together with the model artifact.
+| `xgboost_final_frozen_specification.json` | Present. Frozen deployment definition (ordered features + training invariants). |
+| `xgboost_final_model.json` | Present. Native XGBoost JSON artifact loaded unchanged for inference. |
 
 ## Input contract
 
-- Features are passed as raw values in manifest order.
+- Features are passed as raw values in manifest / frozen-specification order.
+- Input matrix dtype is `float32` with shape `(n, 21)`.
 - No standardization, transformation, or imputation is applied.
 
 ## Output
 
-The backend returns the raw XGBoost score. It is not a calibrated wildfire probability.
+The backend returns `predict_proba(X)[:, 1]` (raw positive-class score). It is not a calibrated wildfire probability.

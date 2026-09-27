@@ -1,0 +1,81 @@
+{
+  "notebook": 21,
+  "step": 3,
+  "analysis_status": "downstream_exploratory",
+  "algorithm": "XGBoost",
+  "source_feature_set": "Notebook-18 R3",
+  "removed_features": [
+    "era5_days_since_rain",
+    "ffmc"
+  ],
+  "feature_count": 21,
+  "features": [
+    "era5_temperature_2m_c",
+    "era5_relative_humidity_pct",
+    "era5_vpd_kpa",
+    "era5_precip_24h_mm",
+    "era5_precip_72h_mm",
+    "era5_precip_168h_mm",
+    "smap_surface_soil_moisture",
+    "smap_rootzone_soil_moisture",
+    "modis_ndwi",
+    "era5_wind_speed_10m_ms",
+    "era5_precip_30d_mm",
+    "modis_ndvi",
+    "season_sin",
+    "season_cos",
+    "flash_energy",
+    "flash_area",
+    "flash_duration_ms",
+    "max_group_area",
+    "max_group_energy",
+    "group_count",
+    "max_events_per_group"
+  ],
+  "development_selected_hyperparameters": {
+    "max_depth": 4,
+    "min_child_weight": 5,
+    "learning_rate": 0.1
+  },
+  "final_n_estimators": 29,
+  "final_n_estimators_rule": "median effective tree count across the five development-CV fits of the selected configuration",
+  "fixed_settings": {
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "reg_alpha": 0.0,
+    "reg_lambda": 1.0,
+    "objective": "binary:logistic",
+    "eval_metric": "auc",
+    "random_seed": 42,
+    "n_jobs": -1,
+    "tree_method": "hist",
+    "missing": "np.nan"
+  },
+  "preprocessing": {
+    "raw_predictors": true,
+    "transformation": false,
+    "standardization": false,
+    "imputation": false
+  },
+  "final_fit": {
+    "training_rows": 6096,
+    "early_stopping": false,
+    "validation_set": null,
+    "class_weighting": false,
+    "resampling": false,
+    "threshold_selection": false
+  },
+  "temporal_test": {
+    "rows": 1719,
+    "positives": 554,
+    "controls": 1165,
+    "used_for_model_selection": false,
+    "used_for_early_stopping": false,
+    "metrics": [
+      "ROC-AUC",
+      "PR-AUC"
+    ]
+  },
+  "step2_selected_specification_sha256": "96ef0842fc5e8152a7eb7c8b112f8e0e25869c7e8ca06f1b3be4dc705436d4c2",
+  "step2_completion_sha256": "9d462b6a93d0f716435063aeca3116e516ed8957867137046e27941d8967cb79"
+}

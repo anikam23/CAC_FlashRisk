@@ -39,7 +39,7 @@ FlashRisk currently provides a working California map interface, real GOES-18 GL
 | MODIS vegetation / moisture retrieval | Implemented (service + golden test; not wired to Analyze yet) |
 | Seasonality (`season_sin` / `season_cos`) | Implemented |
 | Exact 21-feature construction | Under development (all 21 input sources available; vector assembly pending) |
-| Frozen XGBoost inference | Under development |
+| Frozen XGBoost inference | Implemented (service + parity test; not wired to Analyze yet) |
 | Model interpretation / result presentation | Under development |
 | Sentinel-2 reconnaissance imagery | Under development |
 | Multi-flash surveillance report | Under development |
@@ -151,4 +151,10 @@ MODIS golden parity against Earth Engine (real network; needs `EE_PROJECT` plus 
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest -m integration tests/test_modis_golden.py -s
+```
+
+Frozen XGBoost parity (offline; uses local model bundle + optional `reference/model` fixture):
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests/test_xgboost_parity.py
 ```
