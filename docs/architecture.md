@@ -13,7 +13,7 @@ Next.js App Router, TypeScript, Tailwind CSS, shadcn/ui, and MapLibre GL JS. The
 - `src/app` — routes and global styles
 - `src/components/map` — MapLibre map
 - `src/components/flash` — flash list and flash detail (planned)
-- `src/components/analysis` — analysis progress and results (planned)
+- `src/components/analysis` — selected-flash panel (GLM inspection, reconstruction controls, temporary Analyze results)
 - `src/components/ui` — shadcn/ui primitives
 - `src/lib` — configuration and backend API client
 
@@ -24,7 +24,7 @@ The backend URL is set by `NEXT_PUBLIC_API_BASE_URL`.
 FastAPI managed with uv.
 
 - `app/main.py` — app factory, CORS, router registration
-- `app/api/routes` — HTTP routes (currently only `GET /api/health`)
+- `app/api/routes` — HTTP routes (`health`, `glm`, `analyze`)
 - `app/schemas` — Pydantic models
 - `app/core` — settings (`FLASHRISK_*` environment variables)
 - `app/services/glm` — GOES-18 GLM flash retrieval and selected-flash reconstruction
@@ -33,11 +33,11 @@ FastAPI managed with uv.
 - `app/services/inference` — frozen flashrisk-v1 XGBoost loading and `predict_proba` scoring
 - `app/services/imagery` — display-only satellite imagery (planned)
 
-ERA5-Land, SMAP, MODIS, and Notebook-12 seasonality (`season_sin` / `season_cos`) are implemented as reusable backend services. The features pipeline composes those services with selected-flash GLM extraction and frozen XGBoost inference. Environmental retrievals have offline unit tests and optional live golden parity tests. They are not yet exposed through the Analyze UI. SMAP/MODIS share Earth Engine initialization (`EE_PROJECT`); authenticate EE once locally—application code only calls `ee.Initialize(project=...)`.
+ERA5-Land, SMAP, MODIS, and Notebook-12 seasonality (`season_sin` / `season_cos`) are implemented as reusable backend services. The features pipeline composes those services with selected-flash GLM extraction and frozen XGBoost inference. Environmental retrievals have offline unit tests and optional live golden parity tests. SMAP/MODIS share Earth Engine initialization (`EE_PROJECT`); authenticate EE once locally—application code only calls `ee.Initialize(project=...)`.
 
-## Analysis flow (planned)
+## Analysis flow
 
-Analysis runs as an async background job: the client submits a flash, receives a job ID, polls for status and progress that reflect actual backend work, then fetches the completed result. The result is the raw XGBoost score plus model information and environmental context. Satellite imagery is shown for context only and is not a model input.
+`POST /api/analyze` accepts a selected flash identity (`source_file`, `flash_id`), runs the validated synchronous pipeline (`analyze_selected_flash`), and returns the flash identity, raw model score, and all 21 frozen feature names/values. The frontend Analyze button shows loading / results / error states in the right-side panel. Result presentation is temporary (no Low/Moderate/High labels or surveillance visualization yet). Satellite imagery remains planned for context only and is not a model input.
 
 ## Model bundle (`model/flashrisk-v1/`)
 

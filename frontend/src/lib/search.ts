@@ -42,14 +42,16 @@ export type LightningSearchRequest = {
   radiusKm: SearchRadiusKm;
 };
 
+/** Permanent earliest selectable GLM search / analysis day (inclusive, UTC). */
+export const GLM_ARCHIVE_EARLIEST_DATE = "2025-01-01";
+
 /** Inclusive UTC calendar-day bounds for selectable GLM search dates. */
 export function glmSearchDateBounds(now = new Date()): { min: string; max: string } {
   const todayUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
   const dayMs = 24 * 60 * 60 * 1000;
   const max = new Date(todayUtc - 4 * dayMs);
-  const min = new Date(todayUtc - 365 * dayMs);
   return {
-    min: toIsoDateUtc(min),
+    min: GLM_ARCHIVE_EARLIEST_DATE,
     max: toIsoDateUtc(max),
   };
 }

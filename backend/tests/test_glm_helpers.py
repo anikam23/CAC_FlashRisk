@@ -60,5 +60,5 @@ def test_haversine_zero_distance() -> None:
 def test_archive_date_bounds_dynamic() -> None:
     now = datetime(2026, 9, 23, 15, 0, tzinfo=UTC)
     earliest, latest = archive_date_bounds(now)
-    assert earliest.date().isoformat() == "2025-09-23"
+    assert earliest.date().isoformat() == "2025-01-01"
     assert latest.date().isoformat() == "2026-09-19"

@@ -194,3 +194,48 @@ export async function fetchFlashReconstruction(
 
   return (await res.json()) as GlmFlashReconstruction;
 }
+
+export type AnalyzeFlashResponse = {
+  global_flash_id: string;
+  source_file: string;
+  flash_id: number;
+  flash_lat: number;
+  flash_lon: number;
+  flash_timestamp_utc: string;
+  model_score: number;
+  feature_names: string[];
+  feature_values: Record<string, number>;
+  analysis_seconds: number;
+};
+
+export async function analyzeFlash(
+  sourceFile: string,
+  flashId: number,
+  signal?: AbortSignal,
+): Promise<AnalyzeFlashResponse> {
+  const res = await fetch(`${API_BASE_URL}/api/analyze`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    signal,
+    cache: "no-store",
+    body: JSON.stringify({
+      source_file: sourceFile,
+      flash_id: flashId,
+    }),
+  });
+
+  if (!res.ok) {
+    let payload: unknown = null;
+    try {
+      payload = await res.json();
+    } catch {
+      payload = null;
+    }
+    throw new ApiError(
+      detailMessage(payload, `Analyze failed (HTTP ${res.status})`),
+      res.status,
+    );
+  }
+
+  return (await res.json()) as AnalyzeFlashResponse;
+}

@@ -12,7 +12,7 @@ import re
 import shutil
 import tempfile
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 import numpy as np
@@ -32,8 +32,8 @@ ALLOWED_RADIUS_KM = frozenset({5, 10, 25})
 
 # GLM LCFA archive lag: latest selectable search day is current UTC date minus this.
 ARCHIVE_LAG_DAYS = 4
-# Earliest selectable search day relative to current UTC date.
-ARCHIVE_LOOKBACK_DAYS = 365
+# Permanent earliest selectable search / analysis day (inclusive, UTC).
+ARCHIVE_EARLIEST_DATE = date(2025, 1, 1)
 
 
 class GlmSearchError(Exception):
@@ -80,7 +80,12 @@ def archive_date_bounds(now_utc: datetime | None = None) -> tuple[datetime, date
 
     today = datetime(now.year, now.month, now.day, tzinfo=UTC)
     latest = today - timedelta(days=ARCHIVE_LAG_DAYS)
-    earliest = today - timedelta(days=ARCHIVE_LOOKBACK_DAYS)
+    earliest = datetime(
+        ARCHIVE_EARLIEST_DATE.year,
+        ARCHIVE_EARLIEST_DATE.month,
+        ARCHIVE_EARLIEST_DATE.day,
+        tzinfo=UTC,
+    )
     return earliest, latest
 
 

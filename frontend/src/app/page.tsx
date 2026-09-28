@@ -2,14 +2,19 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { FlashAnalysisPanel } from "@/components/analysis/flash-analysis-panel";
+import {
+  FlashAnalysisPanel,
+  type AnalysisState,
+} from "@/components/analysis/flash-analysis-panel";
 import { CaliforniaMap } from "@/components/map/california-map";
 import { SearchPanel } from "@/components/search/search-panel";
 import { TopBar } from "@/components/shell/top-bar";
 import {
   ApiError,
+  analyzeFlash,
   fetchFlashReconstruction,
   searchGlmFlashes,
+  type AnalyzeFlashResponse,
   type GlmFlash,
   type GlmFlashReconstruction,
 } from "@/lib/api";
@@ -47,9 +52,13 @@ export default function Home() {
   const [playing, setPlaying] = useState(false);
   const [reconstructionFocus, setReconstructionFocus] = useState(false);
   const [reconstructionCameraNonce, setReconstructionCameraNonce] = useState(0);
+  const [analysisState, setAnalysisState] = useState<AnalysisState>("idle");
+  const [analysisResult, setAnalysisResult] = useState<AnalyzeFlashResponse | null>(null);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
 
   const searchAbortRef = useRef<AbortController | null>(null);
   const reconstructionAbortRef = useRef<AbortController | null>(null);
+  const analysisAbortRef = useRef<AbortController | null>(null);
   const selectedFlashIdRef = useRef<string | null>(null);
   const flashesRef = useRef(flashes);
   const reconstructionFocusRef = useRef(false);
@@ -139,8 +148,17 @@ export default function Home() {
     return () => cancelAnimationFrame(frame);
   }, [playing, reconstruction]);
 
+  const clearAnalysis = () => {
+    analysisAbortRef.current?.abort();
+    analysisAbortRef.current = null;
+    setAnalysisState("idle");
+    setAnalysisResult(null);
+    setAnalysisError(null);
+  };
+
   const clearSelection = () => {
     reconstructionAbortRef.current?.abort();
+    clearAnalysis();
     setSelectedFlashId(null);
     setReconstruction(null);
     setReconstructionState("idle");
@@ -153,6 +171,7 @@ export default function Home() {
   const selectFlash = (flash: GlmFlash) => {
     if (flash.global_flash_id === selectedFlashIdRef.current) return;
     reconstructionAbortRef.current?.abort();
+    clearAnalysis();
     setPlaying(false);
     setPlaybackGlmMs(0);
     setReconstruction(null);
@@ -160,6 +179,41 @@ export default function Home() {
     setReconstructionError(null);
     setReconstructionFocus(false);
     setSelectedFlashId(flash.global_flash_id);
+  };
+
+  const handleAnalyze = () => {
+    const flash = selectedFlash;
+    if (!flash || analysisState === "loading") return;
+
+    analysisAbortRef.current?.abort();
+    const controller = new AbortController();
+    analysisAbortRef.current = controller;
+    const requestId = flash.global_flash_id;
+
+    setAnalysisState("loading");
+    setAnalysisResult(null);
+    setAnalysisError(null);
+
+    void analyzeFlash(flash.source_file, flash.flash_id, controller.signal)
+      .then((data) => {
+        if (controller.signal.aborted) return;
+        if (selectedFlashIdRef.current !== requestId) return;
+        setAnalysisResult(data);
+        setAnalysisState("ready");
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        if (selectedFlashIdRef.current !== requestId) return;
+        setAnalysisResult(null);
+        setAnalysisState("error");
+        if (error instanceof ApiError) {
+          setAnalysisError(error.message);
+        } else if (error instanceof Error) {
+          setAnalysisError(error.message || "Analyze failed.");
+        } else {
+          setAnalysisError("Analyze failed.");
+        }
+      });
   };
 
   const beginReconstructionPlayback = (fromStart: boolean) => {
@@ -330,10 +384,14 @@ export default function Home() {
             reconstruction={reconstruction}
             reconstructionState={reconstructionState}
             reconstructionError={reconstructionError}
+            analysisState={analysisState}
+            analysisResult={analysisResult}
+            analysisError={analysisError}
             playbackGlmMs={playbackGlmMs}
             playing={playing}
             reconstructionActive={reconstructionFocus}
             onClearSelection={clearSelection}
+            onAnalyze={handleAnalyze}
             onPlay={() => beginReconstructionPlayback(false)}
             onPause={() => setPlaying(false)}
             onReplay={() => beginReconstructionPlayback(true)}

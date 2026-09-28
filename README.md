@@ -6,7 +6,7 @@ FlashRisk helps analysts inspect real lightning flashes in space and time. The e
 
 ## Current milestone
 
-FlashRisk currently provides a working California map interface, real GOES-18 GLM search, selected-flash inspection, and GLM event reconstruction.
+FlashRisk currently provides a working California map interface, real GOES-18 GLM search, selected-flash inspection, GLM event reconstruction, and end-to-end Analyze for a selected flash (environmental features + frozen XGBoost score).
 
 - **Map-first California interface** with location search and map-based target selection inside California
 - **Configurable lightning search:** date, UTC time, centered window (15 / 30 / 60 minutes), and radius (5 / 10 / 25 km)
@@ -15,6 +15,7 @@ FlashRisk currently provides a working California map interface, real GOES-18 GL
 - **Selected-flash GLM event reconstruction** using actual event coordinates and timing (playback slowed for usability)
 - **Observed event extent** (spatial outline of accumulated event coordinates) and **observed span** (maximum great-circle distance between event locations)—visualization aids only, not fire perimeters or predicted burn areas
 - **Search-radius and map-distance context** (radius label and metric scale bar)
+- **Analyze selected flash** — runs the validated 21-feature pipeline and returns a temporary model score + feature values view (no risk-label thresholds yet)
 - **Backend golden/parity tests** for the validated GLM reference flash
 
 ## How it works
@@ -23,7 +24,7 @@ FlashRisk currently provides a working California map interface, real GOES-18 GL
 2. Retrieve real GOES-18 GLM flashes for that query.
 3. Select a flash on the map.
 4. Inspect GLM characteristics and play back the flash’s observed events.
-5. *(Future)* Analyze will add environmental retrieval and frozen-model surveillance prioritization for the selected flash.
+5. Click Analyze to retrieve environmental features, assemble the frozen 21-feature vector, and score with the frozen XGBoost model. The temporary results panel shows the raw model score and feature values.
 
 ## Current status
 
@@ -34,12 +35,13 @@ FlashRisk currently provides a working California map interface, real GOES-18 GL
 | Flash selection & characteristics | Implemented |
 | GLM event reconstruction | Implemented |
 | GLM backend validation / golden tests | Implemented |
-| ERA5-Land environmental retrieval | Implemented (service + golden test; not wired to Analyze yet) |
-| SMAP soil-moisture retrieval | Implemented (service + golden test; not wired to Analyze yet) |
-| MODIS vegetation / moisture retrieval | Implemented (service + golden test; not wired to Analyze yet) |
-| Seasonality (`season_sin` / `season_cos`) | Implemented |
-| Exact 21-feature construction | Implemented (orchestration assembles frozen vector; Analyze API not wired yet) |
-| Frozen XGBoost inference | Implemented (service + parity test; not wired to Analyze yet) |
+| ERA5-Land environmental retrieval | Implemented (used by Analyze) |
+| SMAP soil-moisture retrieval | Implemented (used by Analyze) |
+| MODIS vegetation / moisture retrieval | Implemented (used by Analyze) |
+| Seasonality (`season_sin` / `season_cos`) | Implemented (used by Analyze) |
+| Exact 21-feature construction | Implemented (used by Analyze) |
+| Frozen XGBoost inference | Implemented (used by Analyze) |
+| Analyze API + temporary results UI | Implemented (score + 21 features; no risk labels yet) |
 | Model interpretation / result presentation | Under development |
 | Sentinel-2 reconnaissance imagery | Under development |
 | Multi-flash surveillance report | Under development |

@@ -4,7 +4,12 @@ import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { CircleHelp, LoaderCircle, Pause, Play, RotateCcw, X, Zap } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import type { GlmFlash, GlmFlashReconstruction } from "@/lib/api";
+import type { AnalyzeFlashResponse, GlmFlash, GlmFlashReconstruction } from "@/lib/api";
+import {
+  analysisFeatureRows,
+  formatFeatureValue,
+  formatModelScore,
+} from "@/lib/analysis-display";
 import { GLM_PLAYBACK_SLOWDOWN } from "@/lib/flash-playback";
 import { formatObservedSpanKm, observedEventSpanKm } from "@/lib/geo-distance";
 import { cn } from "cn";
@@ -45,6 +50,7 @@ function countObservedEvents(
 }
 
 type ReconstructionState = "idle" | "loading" | "ready" | "error";
+export type AnalysisState = "idle" | "loading" | "ready" | "error";
 
 type FlashAnalysisPanelProps = {
   className?: string;
@@ -52,10 +58,14 @@ type FlashAnalysisPanelProps = {
   reconstruction?: GlmFlashReconstruction | null;
   reconstructionState?: ReconstructionState;
   reconstructionError?: string | null;
+  analysisState?: AnalysisState;
+  analysisResult?: AnalyzeFlashResponse | null;
+  analysisError?: string | null;
   playbackGlmMs?: number;
   playing?: boolean;
   reconstructionActive?: boolean;
   onClearSelection?: () => void;
+  onAnalyze?: () => void;
   onPlay?: () => void;
   onPause?: () => void;
   onReplay?: () => void;
@@ -69,10 +79,14 @@ export function FlashAnalysisPanel({
   reconstruction = null,
   reconstructionState = "idle",
   reconstructionError = null,
+  analysisState = "idle",
+  analysisResult = null,
+  analysisError = null,
   playbackGlmMs = 0,
   playing = false,
   reconstructionActive = false,
   onClearSelection,
+  onAnalyze,
   onPlay,
   onPause,
   onReplay,
@@ -116,10 +130,14 @@ export function FlashAnalysisPanel({
           reconstruction={reconstruction}
           reconstructionState={reconstructionState}
           reconstructionError={reconstructionError}
+          analysisState={analysisState}
+          analysisResult={analysisResult}
+          analysisError={analysisError}
           playbackGlmMs={playbackGlmMs}
           progress={progress}
           playing={playing}
           reconstructionActive={reconstructionActive}
+          onAnalyze={onAnalyze}
           onPlay={onPlay}
           onPause={onPause}
           onReplay={onReplay}
@@ -136,10 +154,14 @@ function SelectedFlashBody({
   reconstruction,
   reconstructionState,
   reconstructionError,
+  analysisState,
+  analysisResult,
+  analysisError,
   playbackGlmMs,
   progress,
   playing,
   reconstructionActive,
+  onAnalyze,
   onPlay,
   onPause,
   onReplay,
@@ -150,10 +172,14 @@ function SelectedFlashBody({
   reconstruction: GlmFlashReconstruction | null;
   reconstructionState: ReconstructionState;
   reconstructionError: string | null;
+  analysisState: AnalysisState;
+  analysisResult: AnalyzeFlashResponse | null;
+  analysisError: string | null;
   playbackGlmMs: number;
   progress: number;
   playing: boolean;
   reconstructionActive: boolean;
+  onAnalyze?: () => void;
   onPlay?: () => void;
   onPause?: () => void;
   onReplay?: () => void;
@@ -161,6 +187,7 @@ function SelectedFlashBody({
   onSeekGlmMs?: (ms: number) => void;
 }) {
   const features = reconstruction ?? flash;
+  const analyzing = analysisState === "loading";
 
   return (
     <div className="mt-3 flex flex-col gap-5">
@@ -217,13 +244,95 @@ function SelectedFlashBody({
         type="button"
         variant="secondary"
         size="sm"
-        className="w-full opacity-60"
-        disabled
-        title="Analyze is not connected yet"
+        className="w-full"
+        disabled={!onAnalyze || analyzing}
+        onClick={onAnalyze}
       >
-        Analyze
+        {analyzing ? (
+          <span className="inline-flex items-center gap-2">
+            <LoaderCircle className="size-3.5 animate-spin" aria-hidden />
+            Analyzing…
+          </span>
+        ) : (
+          "Analyze"
+        )}
       </Button>
+
+      <AnalysisStatus
+        state={analysisState}
+        result={analysisResult}
+        error={analysisError}
+      />
     </div>
+  );
+}
+
+function AnalysisStatus({
+  state,
+  result,
+  error,
+}: {
+  state: AnalysisState;
+  result: AnalyzeFlashResponse | null;
+  error: string | null;
+}) {
+  if (state === "idle") return null;
+
+  if (state === "loading") {
+    return (
+      <section aria-label="Analysis" aria-busy="true">
+        <SectionLabel>Analysis</SectionLabel>
+        <div className="mt-2.5 flex items-start gap-2 text-[12px] leading-snug text-muted-foreground">
+          <LoaderCircle className="mt-0.5 size-3.5 shrink-0 animate-spin text-primary/80" aria-hidden />
+          <span>
+            Running environmental retrieval and frozen-model scoring. This can take several
+            minutes…
+          </span>
+        </div>
+      </section>
+    );
+  }
+
+  if (state === "error") {
+    return (
+      <section aria-label="Analysis">
+        <SectionLabel>Analysis</SectionLabel>
+        <p className="mt-2.5 text-[12px] leading-snug text-amber-100/85">
+          {error ?? "Analyze failed. Try again after checking backend connectivity."}
+        </p>
+      </section>
+    );
+  }
+
+  if (!result) return null;
+
+  const rows = analysisFeatureRows(result.feature_names, result.feature_values);
+
+  return (
+    <section aria-label="Analysis results">
+      <SectionLabel>Analysis results</SectionLabel>
+      <p className="mt-2.5 text-[11px] leading-snug text-muted-foreground">
+        Temporary view — model score and frozen 21-feature inputs (no risk labels).
+      </p>
+      <dl className="mt-3 space-y-2 text-[12.5px]">
+        <MetaRow label="Model score" value={formatModelScore(result.model_score)} />
+        <MetaRow label="Runtime" value={`${result.analysis_seconds.toFixed(1)} s`} />
+      </dl>
+      <div className="mt-3.5">
+        <p className="text-[10px] font-medium tracking-[0.14em] text-muted-foreground uppercase">
+          Features ({rows.length})
+        </p>
+        <dl className="mt-2 max-h-56 space-y-1.5 overflow-y-auto pr-1 text-[11.5px]">
+          {rows.map((row) => (
+            <MetaRow
+              key={row.name}
+              label={row.name}
+              value={formatFeatureValue(row.value)}
+            />
+          ))}
+        </dl>
+      </div>
+    </section>
   );
 }
 
