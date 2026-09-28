@@ -38,7 +38,7 @@ FlashRisk currently provides a working California map interface, real GOES-18 GL
 | SMAP soil-moisture retrieval | Implemented (service + golden test; not wired to Analyze yet) |
 | MODIS vegetation / moisture retrieval | Implemented (service + golden test; not wired to Analyze yet) |
 | Seasonality (`season_sin` / `season_cos`) | Implemented |
-| Exact 21-feature construction | Under development (all 21 input sources available; vector assembly pending) |
+| Exact 21-feature construction | Implemented (orchestration assembles frozen vector; Analyze API not wired yet) |
 | Frozen XGBoost inference | Implemented (service + parity test; not wired to Analyze yet) |
 | Model interpretation / result presentation | Under development |
 | Sentinel-2 reconnaissance imagery | Under development |

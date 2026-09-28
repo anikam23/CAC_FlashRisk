@@ -29,11 +29,11 @@ FastAPI managed with uv.
 - `app/core` — settings (`FLASHRISK_*` environment variables)
 - `app/services/glm` — GOES-18 GLM flash retrieval and selected-flash reconstruction
 - `app/services/environment` — ERA5-Land (`era5.py`), NASA SMAP (`smap.py`), MODIS MOD09GA NDWI/NDVI (`modis.py`), seasonality (`seasonality.py`)
-- `app/services/features` — builds the 21-feature vector (planned; all 21 input sources now exist)
+- `app/services/features` — assembles the frozen 21-feature map and orchestrates single-flash analysis
 - `app/services/inference` — frozen flashrisk-v1 XGBoost loading and `predict_proba` scoring
 - `app/services/imagery` — display-only satellite imagery (planned)
 
-ERA5-Land, SMAP, MODIS, and Notebook-12 seasonality (`season_sin` / `season_cos`) are implemented as reusable backend services. Environmental retrievals have offline unit tests and optional live golden parity tests. They are not yet exposed through the Analyze UI. SMAP/MODIS share Earth Engine initialization (`EE_PROJECT`); authenticate EE once locally—application code only calls `ee.Initialize(project=...)`.
+ERA5-Land, SMAP, MODIS, and Notebook-12 seasonality (`season_sin` / `season_cos`) are implemented as reusable backend services. The features pipeline composes those services with selected-flash GLM extraction and frozen XGBoost inference. Environmental retrievals have offline unit tests and optional live golden parity tests. They are not yet exposed through the Analyze UI. SMAP/MODIS share Earth Engine initialization (`EE_PROJECT`); authenticate EE once locally—application code only calls `ee.Initialize(project=...)`.
 
 ## Analysis flow (planned)
 

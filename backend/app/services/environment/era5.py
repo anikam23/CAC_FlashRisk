@@ -19,6 +19,8 @@ from app.services.environment.era5_physics import (
     atmospheric_features_from_kelvin,
     reconstruct_hourly_precip_mm,
     sum_precip_window_mm,
+    sum_raw_tp_window_mm,
+    wind_speed_ms,
 )
 
 DATASET = "reanalysis-era5-land"
@@ -337,8 +339,6 @@ def _compute_features_from_files(
         recent_ds = datasets[-1]
         t2m = _nearest_point(recent_ds, _find_var(recent_ds, T2M_CANDIDATES), latitude, longitude)
         d2m = _nearest_point(recent_ds, _find_var(recent_ds, D2M_CANDIDATES), latitude, longitude)
-        u10 = _nearest_point(recent_ds, _find_var(recent_ds, U10_CANDIDATES), latitude, longitude)
-        v10 = _nearest_point(recent_ds, _find_var(recent_ds, V10_CANDIDATES), latitude, longitude)
 
         grid_lat = float(t2m["latitude"].values)
         grid_lon = float(t2m["longitude"].values)
@@ -350,15 +350,24 @@ def _compute_features_from_files(
             _assert_same_grid(tp, grid_lat, grid_lon)
             tp_frames.append(_tp_frame(tp))
 
-        for da in (d2m, u10, v10):
-            _assert_same_grid(da, grid_lat, grid_lon)
+        _assert_same_grid(d2m, grid_lat, grid_lon)
 
         atm_idx, atm_time = _atmospheric_index(t2m, flash_time)
         temp_k = float(np.asarray(t2m.values).reshape(-1)[atm_idx])
         dew_k = float(np.asarray(d2m.values).reshape(-1)[atm_idx])
-        u_ms = float(np.asarray(u10.values).reshape(-1)[atm_idx])
-        v_ms = float(np.asarray(v10.values).reshape(-1)[atm_idx])
-        atm = atmospheric_features_from_kelvin(temp_k, dew_k, u_ms, v_ms)
+        # Temperature / RH / VPD keep the shared nearest-grid + latest-at-or-before path.
+        # Wind uses a separate science-pipeline cell/time selection below.
+        atm = atmospheric_features_from_kelvin(temp_k, dew_k, 0.0, 0.0)
+
+        u_name = _find_var(recent_ds, U10_CANDIDATES)
+        v_name = _find_var(recent_ds, V10_CANDIDATES)
+        wind_ms = _extract_wind_speed_ms(
+            recent_ds[u_name],
+            recent_ds[v_name],
+            flash_time=flash_time,
+            latitude=latitude,
+            longitude=longitude,
+        )
 
         tp_raw = (
             pd.concat(tp_frames, ignore_index=True)
@@ -372,7 +381,8 @@ def _compute_features_from_files(
         p24 = _require_precip_window(tp_raw, flash_time, 24)
         p72 = _require_precip_window(tp_raw, flash_time, 72)
         p168 = _require_precip_window(tp_raw, flash_time, 168)
-        p720 = _require_precip_window(tp_raw, flash_time, 720)
+        # Notebook 12 Step 6: 30d feature is sum(raw tp_m * 1000), not reconstructed hourly.
+        p720 = _require_raw_tp_30d_window(tp_raw, flash_time)
 
         features = Era5Features(
             era5_temperature_2m_c=atm.temperature_2m_c,
@@ -381,7 +391,7 @@ def _compute_features_from_files(
             era5_precip_24h_mm=p24,
             era5_precip_72h_mm=p72,
             era5_precip_168h_mm=p168,
-            era5_wind_speed_10m_ms=atm.wind_speed_10m_ms,
+            era5_wind_speed_10m_ms=wind_ms,
             era5_precip_30d_mm=p720,
         )
         return _Computed(
@@ -459,6 +469,113 @@ def _atmospheric_index(
     return atm_idx, atm_time
 
 
+def _k_nearest_coordinate_values(
+    values: np.ndarray,
+    target: float,
+    k: int = 4,
+) -> list[float]:
+    """Return up to ``k`` unique coordinate values nearest to ``target``."""
+    uniq = np.unique(np.asarray(values, dtype=float))
+    if len(uniq) == 0:
+        return []
+    order = np.argsort(np.abs(uniq - float(target)))
+    return [float(v) for v in uniq[order[: min(k, len(uniq))]]]
+
+
+def rank_wind_candidate_cells(
+    latitudes: np.ndarray,
+    longitudes: np.ndarray,
+    flash_lat: float,
+    flash_lon: float,
+    *,
+    k: int = 4,
+) -> list[tuple[float, float]]:
+    """Rank up to 16 cells from the ``k`` nearest lats × ``k`` nearest lons.
+
+    Distance is squared Euclidean in degrees with longitude scaled by
+    ``cos(flash_latitude)`` (radians).
+    """
+    lat_cands = _k_nearest_coordinate_values(latitudes, flash_lat, k=k)
+    lon_cands = _k_nearest_coordinate_values(longitudes, flash_lon, k=k)
+    cos_lat = float(np.cos(np.deg2rad(float(flash_lat))))
+    scored: list[tuple[float, float, float]] = []
+    for lat in lat_cands:
+        for lon in lon_cands:
+            dist2 = (lat - flash_lat) ** 2 + ((lon - flash_lon) * cos_lat) ** 2
+            scored.append((dist2, lat, lon))
+    scored.sort(key=lambda item: (item[0], item[1], item[2]))
+    return [(lat, lon) for _, lat, lon in scored]
+
+
+def nearest_abs_time_index(
+    times: pd.Series | np.ndarray,
+    flash_time: pd.Timestamp,
+) -> int:
+    """Index of the ERA timestamp with the smallest |Δt| from the flash."""
+    flash_time = pd.Timestamp(flash_time)
+    if flash_time.tzinfo is None:
+        flash_time = flash_time.tz_localize("UTC")
+    else:
+        flash_time = flash_time.tz_convert("UTC")
+    era_times = pd.to_datetime(times, utc=True)
+    if len(era_times) == 0:
+        raise Era5CoverageError("ERA5 wind time axis is empty.")
+    deltas = np.abs((era_times - flash_time).total_seconds().to_numpy(dtype=float))
+    return int(np.argmin(deltas))
+
+
+def _squeeze_non_spatial_singletons(da: xr.DataArray) -> xr.DataArray:
+    """Drop singleton dims that are not time/latitude/longitude (e.g. number, expver)."""
+    keep = {"time", "latitude", "longitude"}
+    for dim in list(da.dims):
+        if dim not in keep and da.sizes.get(dim, 0) == 1:
+            da = da.squeeze(dim, drop=True)
+    return da
+
+
+def _extract_wind_speed_ms(
+    u_da: xr.DataArray,
+    v_da: xr.DataArray,
+    *,
+    flash_time: pd.Timestamp,
+    latitude: float,
+    longitude: float,
+) -> float:
+    """Science-pipeline wind: ranked neighborhood cell + nearest-abs-time U/V."""
+    u_da = _squeeze_non_spatial_singletons(u_da)
+    v_da = _squeeze_non_spatial_singletons(v_da)
+    for name, da in (("u10", u_da), ("v10", v_da)):
+        missing = {"time", "latitude", "longitude"} - set(da.dims)
+        if missing:
+            raise Era5DataError(
+                f"ERA5 wind field '{name}' missing dimensions {sorted(missing)}; "
+                f"have {list(da.dims)}."
+            )
+
+    time_idx = nearest_abs_time_index(u_da["time"].values, flash_time)
+    candidates = rank_wind_candidate_cells(
+        np.asarray(u_da["latitude"].values, dtype=float),
+        np.asarray(u_da["longitude"].values, dtype=float),
+        float(latitude),
+        float(longitude),
+    )
+    if not candidates:
+        raise Era5CoverageError("No ERA5 wind grid candidates available.")
+
+    u_at_time = u_da.isel(time=time_idx)
+    v_at_time = v_da.isel(time=time_idx)
+    for lat, lon in candidates:
+        u_ms = float(u_at_time.sel(latitude=lat, longitude=lon).values)
+        v_ms = float(v_at_time.sel(latitude=lat, longitude=lon).values)
+        if np.isfinite(u_ms) and np.isfinite(v_ms):
+            return wind_speed_ms(u_ms, v_ms)
+
+    raise Era5CoverageError(
+        "No finite ERA5-Land 10 m wind (u10/v10) among ranked neighbor cells "
+        "at the nearest absolute timestamp."
+    )
+
+
 def _require_precip_window(
     tp_raw: pd.DataFrame,
     flash_time: pd.Timestamp,
@@ -482,4 +599,31 @@ def _require_precip_window(
         )
     if not np.isfinite(total):
         raise Era5CoverageError(f"{hours}-hour precipitation sum is not finite.")
+    return float(total)
+
+
+def _require_raw_tp_30d_window(
+    tp_raw: pd.DataFrame,
+    flash_time: pd.Timestamp,
+) -> float:
+    """Notebook 12 Step 6 construction for era5_precip_30d_mm only."""
+    hours = 720
+    total, n_rows, n_valid = sum_raw_tp_window_mm(
+        times=tp_raw["time"],
+        tp_m=tp_raw["tp_m"].to_numpy(dtype=float),
+        flash_time=flash_time,
+        hours=hours,
+    )
+    if n_rows != hours:
+        raise Era5CoverageError(
+            f"{hours}-hour raw-tp window contains {n_rows} ERA timestamps "
+            f"(expected {hours})."
+        )
+    if n_valid != hours:
+        raise Era5CoverageError(
+            f"{hours}-hour raw-tp window contains only {n_valid}/{hours} "
+            "finite tp values."
+        )
+    if not np.isfinite(total):
+        raise Era5CoverageError(f"{hours}-hour raw-tp sum is not finite.")
     return float(total)

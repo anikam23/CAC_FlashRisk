@@ -6,10 +6,15 @@ import warnings
 import numpy as np
 import pandas as pd
 import pytest
+import xarray as xr
 
 from app.services.environment.era5 import (
     Era5ConfigError,
+    Era5CoverageError,
+    _extract_wind_speed_ms,
     ensure_utc_timestamp,
+    nearest_abs_time_index,
+    rank_wind_candidate_cells,
     timestamp_to_utc_datetime,
 )
 from app.services.environment.era5_physics import (
@@ -79,8 +84,46 @@ def test_reconstruct_hourly_precip_convention() -> None:
     assert hourly[2] == pytest.approx(0.001 * 1000.0)
     # 02 UTC = tp(02) - tp(01)
     assert hourly[3] == pytest.approx((0.003 - 0.001) * 1000.0)
-    # Tiny negative artifact clamps to 0
+    # Tiny negative artifact clamps to 0 under Notebook 10 mm rule
     assert hourly[4] == pytest.approx(0.0)
+
+
+def test_notebook10_negative_precip_clamp_mm() -> None:
+    """Notebook 10: clamp only when -1e-3 <= increment_mm < 0 (after m→mm)."""
+    times = pd.to_datetime(
+        [
+            "2026-09-14 01:00:00",
+            "2026-09-14 02:00:00",
+            "2026-09-14 03:00:00",
+            "2026-09-14 04:00:00",
+            "2026-09-14 05:00:00",
+        ],
+        utc=True,
+    )
+    # Construct known mm increments via tp differences (×1000):
+    # 01: +1.0 mm (tp=0.001)
+    # 02: -1.5e-5 mm (should clamp → 0)
+    # 03: -1e-3 mm (boundary; should clamp → 0)
+    # 04: -1.1e-3 mm (below threshold; must NOT clamp)
+    # 05: +0.5 mm (unchanged)
+    tp_m = np.array(
+        [
+            0.001,
+            0.001 - 1.5e-8,
+            (0.001 - 1.5e-8) - 1e-6,
+            (0.001 - 1.5e-8) - 1e-6 - 1.1e-6,
+            (0.001 - 1.5e-8) - 1e-6 - 1.1e-6 + 0.0005,
+        ],
+        dtype=float,
+    )
+    hourly = reconstruct_hourly_precip_mm(times, tp_m)
+
+    assert hourly[0] == pytest.approx(1.0)
+    assert hourly[1] == 0.0  # -1.5e-5 mm clamped
+    assert hourly[2] == 0.0  # -1e-3 mm boundary clamped
+    assert hourly[3] == pytest.approx(-1.1e-3)  # materially negative retained
+    assert hourly[4] == pytest.approx(0.5)
+
 
 
 def test_precip_window_requires_exact_coverage() -> None:
@@ -110,6 +153,25 @@ def test_precip_window_requires_exact_coverage() -> None:
     assert np.isnan(total2)
 
 
+def test_raw_tp_window_sums_tp_times_1000() -> None:
+    """Notebook 12 Step 6: sum(raw tp_m * 1000), no hourly reconstruction."""
+    from app.services.environment.era5_physics import sum_raw_tp_window_mm
+
+    flash = pd.Timestamp("2026-09-14 00:36:33", tz="UTC")
+    times = pd.date_range("2026-09-13 01:00:00", periods=24, freq="h", tz="UTC")
+    tp_m = np.full(24, 0.001, dtype=float)  # 1 mm equivalent each if treated as raw
+    total, n_rows, n_valid = sum_raw_tp_window_mm(
+        times=times,
+        tp_m=tp_m,
+        flash_time=flash,
+        hours=24,
+    )
+    assert n_rows == 24
+    assert n_valid == 24
+    assert total == pytest.approx(24.0)
+
+
+
 def test_ensure_utc_rejects_naive() -> None:
     with pytest.raises(Era5ConfigError):
         ensure_utc_timestamp(datetime(2026, 9, 14, 0, 36, 33))
@@ -129,3 +191,101 @@ def test_timestamp_to_utc_datetime_truncates_nanoseconds_without_warning() -> No
     assert converted == datetime(2026, 9, 14, 0, 36, 33, 731977, tzinfo=UTC)
     assert pd.Timestamp(converted) <= ts
     assert not any("nanosecond" in str(w.message).lower() for w in caught)
+
+
+def test_rank_wind_candidates_cosine_longitude_and_order() -> None:
+    # 0.1° ERA5-Land style neighborhood around a mid-latitude flash.
+    lats = np.array([41.4, 41.5, 41.6, 41.7, 41.8], dtype=float)
+    lons = np.array([-122.4, -122.3, -122.2, -122.1, -122.0], dtype=float)
+    flash_lat = 41.55
+    flash_lon = -122.25
+    ranked = rank_wind_candidate_cells(lats, lons, flash_lat, flash_lon, k=4)
+    assert len(ranked) == 16
+    # Closest cell should be (41.6, -122.2) or (41.5, -122.3)/(41.5,-122.2) etc.
+    # Verify cosine weighting: a cell farther in lon but nearer in lat can win.
+    cos_lat = np.cos(np.deg2rad(flash_lat))
+
+    def dist2(lat: float, lon: float) -> float:
+        return (lat - flash_lat) ** 2 + ((lon - flash_lon) * cos_lat) ** 2
+
+    dists = [dist2(la, lo) for la, lo in ranked]
+    assert dists == sorted(dists)
+    # First four latitudes used are the four nearest to 41.55 → 41.5,41.6,41.4,41.7
+    used_lats = {la for la, _ in ranked}
+    assert used_lats == {41.4, 41.5, 41.6, 41.7}
+
+
+def test_nearest_abs_time_index_prefers_closest_not_latest_before() -> None:
+    times = pd.to_datetime(
+        ["2025-08-01 00:00:00", "2025-08-01 01:00:00", "2025-08-01 02:00:00"],
+        utc=True,
+    )
+    # Flash 00:50 → closest is 01:00 (10 min), not latest-at-or-before 00:00 (50 min).
+    flash = pd.Timestamp("2025-08-01 00:50:00", tz="UTC")
+    assert nearest_abs_time_index(times, flash) == 1
+    # Exact match
+    assert nearest_abs_time_index(times, pd.Timestamp("2025-08-01 01:00:00", tz="UTC")) == 1
+
+
+def test_extract_wind_skips_nonfinite_cell_then_uses_next() -> None:
+    times = pd.to_datetime(
+        ["2025-08-01 00:00:00", "2025-08-01 01:00:00"],
+        utc=True,
+    )
+    lats = np.array([40.0, 40.1], dtype=float)
+    lons = np.array([-120.0, -119.9], dtype=float)
+    # Shape (time, lat, lon). Closest cell (40.0, -120.0) is NaN; next finite.
+    u = np.full((2, 2, 2), np.nan, dtype=float)
+    v = np.full((2, 2, 2), np.nan, dtype=float)
+    # At 01:00 (index 1), second-ranked finite cell: lat 40.0 lon -119.9 → u=3, v=4
+    u[1, 0, 1] = 3.0
+    v[1, 0, 1] = 4.0
+    # Also put a wrong value at 00:00 on nearest cell to ensure abs-nearest time is used.
+    u[0, 0, 0] = 100.0
+    v[0, 0, 0] = 0.0
+
+    ds_u = xr.DataArray(
+        u,
+        dims=("time", "latitude", "longitude"),
+        coords={"time": times, "latitude": lats, "longitude": lons},
+    )
+    ds_v = xr.DataArray(
+        v,
+        dims=("time", "latitude", "longitude"),
+        coords={"time": times, "latitude": lats, "longitude": lons},
+    )
+    flash = pd.Timestamp("2025-08-01 00:50:00", tz="UTC")
+    speed = _extract_wind_speed_ms(
+        ds_u,
+        ds_v,
+        flash_time=flash,
+        latitude=40.0,
+        longitude=-120.0,
+    )
+    assert speed == pytest.approx(5.0)
+
+
+def test_extract_wind_raises_when_all_candidates_nonfinite() -> None:
+    times = pd.to_datetime(["2025-08-01 00:00:00"], utc=True)
+    lats = np.array([40.0, 40.1], dtype=float)
+    lons = np.array([-120.0, -119.9], dtype=float)
+    u = np.full((1, 2, 2), np.nan, dtype=float)
+    v = np.full((1, 2, 2), np.nan, dtype=float)
+    ds_u = xr.DataArray(
+        u,
+        dims=("time", "latitude", "longitude"),
+        coords={"time": times, "latitude": lats, "longitude": lons},
+    )
+    ds_v = xr.DataArray(
+        v,
+        dims=("time", "latitude", "longitude"),
+        coords={"time": times, "latitude": lats, "longitude": lons},
+    )
+    with pytest.raises(Era5CoverageError, match="No finite ERA5-Land 10 m wind"):
+        _extract_wind_speed_ms(
+            ds_u,
+            ds_v,
+            flash_time=pd.Timestamp("2025-08-01 00:00:00", tz="UTC"),
+            latitude=40.0,
+            longitude=-120.0,
+        )

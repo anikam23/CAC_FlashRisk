@@ -65,7 +65,8 @@ def reconstruct_hourly_precip_mm(
     - 01 UTC: increment = tp(01)
     - 02–23 UTC: increment = tp(H) - tp(H-1) when previous hour is contiguous
     - 00 UTC: increment = tp(00) - previous-day tp(23) when contiguous
-    Tiny negatives in (-1e-8, 0) clamp to 0.
+    Notebook 10 clamp (after conversion to mm):
+    if increment_mm < 0 and increment_mm >= -1e-3: increment_mm = 0.0
     """
     frame = pd.DataFrame(
         {
@@ -97,11 +98,12 @@ def reconstruct_hourly_precip_mm(
             ):
                 increment_m = current - float(prev)
 
-        if np.isfinite(increment_m) and increment_m < 0 and increment_m > -1e-8:
-            increment_m = 0.0
-
         if np.isfinite(increment_m):
-            hourly_mm[i] = increment_m * 1000.0
+            increment_mm = increment_m * 1000.0
+            # Notebook 10 exact negative-precip clamp (applied in mm).
+            if increment_mm < 0 and increment_mm >= -1e-3:
+                increment_mm = 0.0
+            hourly_mm[i] = increment_mm
 
     # Restore original caller order if input was pre-sorted; callers sort anyway.
     return hourly_mm
@@ -136,5 +138,38 @@ def sum_precip_window_mm(
     n_rows = len(subset)
     n_valid = int(subset["precip_hour_mm"].notna().sum())
     value = subset["precip_hour_mm"].sum(min_count=n_rows)
+    total = float(value) if pd.notna(value) else float("nan")
+    return total, n_rows, n_valid
+
+
+def sum_raw_tp_window_mm(
+    *,
+    times: pd.Series | np.ndarray,
+    tp_m: np.ndarray,
+    flash_time: pd.Timestamp,
+    hours: int,
+) -> tuple[float, int, int]:
+    """Notebook 12 Step 6: sum(raw tp_m * 1000) over flash_time - hours <= t < flash_time.
+
+    Does not reconstruct hourly increments. Returns (sum_mm_or_nan, n_rows, n_valid).
+    """
+    flash_time = pd.Timestamp(flash_time)
+    if flash_time.tzinfo is None:
+        flash_time = flash_time.tz_localize("UTC")
+    else:
+        flash_time = flash_time.tz_convert("UTC")
+
+    frame = pd.DataFrame(
+        {
+            "time": pd.to_datetime(times, utc=True),
+            "tp_m": np.asarray(tp_m, dtype=float),
+        }
+    )
+    start = flash_time - pd.Timedelta(hours=hours)
+    mask = (frame["time"] >= start) & (frame["time"] < flash_time)
+    subset = frame.loc[mask, ["time", "tp_m"]]
+    n_rows = len(subset)
+    n_valid = int(subset["tp_m"].notna().sum())
+    value = (subset["tp_m"] * 1000.0).sum(min_count=n_rows)
     total = float(value) if pd.notna(value) else float("nan")
     return total, n_rows, n_valid
