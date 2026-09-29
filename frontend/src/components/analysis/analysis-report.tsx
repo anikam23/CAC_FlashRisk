@@ -1,16 +1,16 @@
 "use client";
 
 import { useId, useState, type ReactNode } from "react";
-import { ChevronDown, Clock3, MapPin } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 
 import type { AnalyzeFlashResponse, GlmFlash } from "@/lib/api";
 import {
-  analysisFeatureRows,
-  featuresBySection,
   formatAnalysisRuntime,
-  formatFeatureValue,
   formatFlashRiskScore,
+  primaryEnvironmentSections,
   scoreMarkerPercent,
+  secondaryFeatureSections,
+  type SectionFeatureRow,
 } from "@/lib/analysis-display";
 import { cn } from "cn";
 
@@ -33,159 +33,239 @@ type AnalysisReportProps = {
 
 export function AnalysisReport({ result, flash }: AnalysisReportProps) {
   const scoreId = useId();
-  const [inputsOpen, setInputsOpen] = useState(false);
   const displayScore = formatFlashRiskScore(result.model_score);
   const markerPct = scoreMarkerPercent(result.model_score);
-  const sections = featuresBySection(result.feature_names, result.feature_values);
-  const rawRows = analysisFeatureRows(result.feature_names, result.feature_values);
+  const primary = primaryEnvironmentSections(result.feature_names, result.feature_values);
+  const secondary = secondaryFeatureSections(result.feature_names, result.feature_values);
   const timestamp = result.flash_timestamp_utc || flash.flash_start_time;
 
   return (
-    <section
-      aria-label="FlashRisk Analysis Report"
-      className="overflow-hidden rounded-lg border border-white/10 bg-[oklch(0.14_0.016_258/0.55)] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)]"
-    >
-      <header className="border-b border-white/8 px-3.5 pt-3.5 pb-3">
-        <p className="text-[10px] font-medium tracking-[0.2em] text-primary/85 uppercase">
-          FlashRisk Analysis Report
-        </p>
-        <p className="mt-1 text-[12px] leading-snug text-muted-foreground">
-          Surveillance prioritization score for the selected GLM flash
-        </p>
-      </header>
-
-      <div className="space-y-4 px-3.5 py-4">
-        {/* Score hero */}
+    <section aria-label="FlashRisk Analysis Report" className="flex flex-col gap-4">
+      <div
+        className="relative overflow-hidden rounded-lg border border-primary/20 bg-[linear-gradient(120deg,oklch(0.22_0.035_50/0.4),oklch(0.15_0.018_258/0.92)_52%)] px-4 py-4"
+        aria-labelledby={scoreId}
+      >
         <div
-          className="relative overflow-hidden rounded-md border border-primary/20 bg-[linear-gradient(165deg,oklch(0.22_0.03_50/0.35),oklch(0.16_0.02_258/0.9)_55%)] px-3.5 py-4"
-          aria-labelledby={scoreId}
-        >
-          <div
-            className="pointer-events-none absolute -top-10 -right-8 size-28 rounded-full bg-primary/12 blur-2xl"
-            aria-hidden
-          />
-          <p className="text-[10px] font-medium tracking-[0.18em] text-muted-foreground uppercase">
-            FlashRisk Score
-          </p>
-          <div className="mt-1.5 flex items-end gap-2">
-            <p
-              id={scoreId}
-              className="font-mono text-[2.65rem] leading-none font-semibold tracking-tight text-foreground tabular-nums"
-            >
-              {displayScore}
-            </p>
-            <span className="mb-1 text-[12px] text-muted-foreground">/ 100</span>
-          </div>
-          <p className="mt-2 max-w-[18rem] text-[11px] leading-snug text-muted-foreground/90">
-            Ranking aid for follow-up review — not a calibrated likelihood of ignition.
-          </p>
-
-          <div className="mt-4">
-            <ScoreScale markerPercent={markerPct} scoreLabel={displayScore} />
-          </div>
-        </div>
-
-        {/* Compact context */}
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <ContextChip
-            icon={<MapPin className="size-3" aria-hidden />}
-            label="Flash"
-            value={`#${flash.flash_id}`}
-            detail={formatCoord(result.flash_lat, result.flash_lon)}
-          />
-          <ContextChip
-            icon={<Clock3 className="size-3" aria-hidden />}
-            label="Analyzed"
-            value={formatUtc(timestamp)}
-            detail={`Runtime ${formatAnalysisRuntime(result.analysis_seconds)}`}
-          />
-        </div>
-
-        {/* Grouped model inputs */}
-        <div className="space-y-3">
-          <div>
-            <p className="text-[10px] font-medium tracking-[0.16em] text-muted-foreground uppercase">
-              Model inputs
-            </p>
-            <p className="mt-1 text-[11px] leading-snug text-muted-foreground/85">
-              Environmental and lightning variables used by the frozen model
-            </p>
-          </div>
-
-          {sections.map(({ section, rows }) => (
-            <div
-              key={section.id}
-              className="rounded-md border border-white/8 bg-black/20 px-3 py-2.5"
-            >
-              <div className="mb-2">
-                <p className="text-[11px] font-medium text-foreground/95">{section.title}</p>
-                <p className="text-[10px] leading-snug text-muted-foreground/80">{section.blurb}</p>
-              </div>
-              <dl className="space-y-1.5">
-                {rows.map((row) => (
-                  <div
-                    key={row.name}
-                    className="grid grid-cols-[minmax(0,1.15fr)_minmax(0,0.95fr)] items-baseline gap-x-3"
-                  >
-                    <dt className="truncate text-[11.5px] text-muted-foreground">{row.label}</dt>
-                    <dd className="text-right text-[12px] tabular-nums text-foreground/92">
-                      <span>{row.displayText}</span>
-                      {row.unit ? (
-                        <span className="ml-1 text-[10px] text-muted-foreground/75">{row.unit}</span>
-                      ) : null}
-                    </dd>
-                  </div>
-                ))}
-              </dl>
+          className="pointer-events-none absolute -top-12 right-0 size-36 rounded-full bg-primary/10 blur-3xl"
+          aria-hidden
+        />
+        <div className="relative grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.95fr)] lg:items-end">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <p className="text-[10px] font-medium tracking-[0.2em] text-primary/90 uppercase">
+                FlashRisk Score
+              </p>
+              <span className="rounded-sm border border-emerald-400/25 bg-emerald-400/10 px-1.5 py-0.5 text-[10px] font-medium tracking-wide text-emerald-200/90 uppercase">
+                Analysis complete
+              </span>
             </div>
-          ))}
-        </div>
+            <div className="mt-2 flex items-end gap-2">
+              <p
+                id={scoreId}
+                className="font-mono text-[3rem] leading-none font-semibold tracking-tight text-foreground tabular-nums sm:text-[3.35rem]"
+              >
+                {displayScore}
+              </p>
+              <span className="mb-1.5 text-[13px] text-muted-foreground">/ 100</span>
+            </div>
+            <p className="mt-2 max-w-md text-[12.5px] leading-snug text-muted-foreground/90">
+              Model-generated ignition surveillance priority. Higher scores indicate flashes the
+              model identifies for greater ignition surveillance priority.
+            </p>
+            <div className="mt-3.5 max-w-sm">
+              <ScoreScale markerPercent={markerPct} scoreLabel={displayScore} />
+            </div>
+          </div>
 
-        {/* Expandable raw vector */}
-        <div className="rounded-md border border-white/8 bg-black/15">
-          <button
-            type="button"
-            className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left transition-colors hover:bg-white/[0.03]"
-            aria-expanded={inputsOpen}
-            onClick={() => setInputsOpen((open) => !open)}
-          >
-            <span>
-              <span className="block text-[11px] font-medium text-foreground/90">
-                All 21 model inputs
-              </span>
-              <span className="mt-0.5 block text-[10px] text-muted-foreground/80">
-                Exact feature names and values in model order
-              </span>
-            </span>
-            <ChevronDown
-              className={cn(
-                "size-4 shrink-0 text-muted-foreground transition-transform duration-200",
-                inputsOpen && "rotate-180",
-              )}
-              aria-hidden
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-2.5 border-t border-white/8 pt-3 text-[13px] lg:border-t-0 lg:border-l lg:pt-0 lg:pl-4">
+            <MetaCell label="Flash" value={`#${flash.flash_id}`} />
+            <MetaCell
+              label="Runtime"
+              value={formatAnalysisRuntime(result.analysis_seconds)}
             />
-          </button>
-          {inputsOpen ? (
-            <dl className="max-h-52 space-y-1.5 overflow-y-auto border-t border-white/8 px-3 py-2.5 text-[11px]">
-              {rawRows.map((row, index) => (
-                <div
-                  key={row.name}
-                  className="grid grid-cols-[1.15rem_minmax(0,1fr)_auto] items-baseline gap-x-2"
-                >
-                  <span className="text-muted-foreground/55 tabular-nums">{index}</span>
-                  <dt className="truncate font-mono text-[10.5px] text-muted-foreground">
-                    {row.name}
-                  </dt>
-                  <dd className="font-mono text-right tabular-nums text-foreground/88">
-                    {formatFeatureValue(row.value)}
-                  </dd>
-                </div>
-              ))}
-            </dl>
-          ) : null}
+            <MetaCell
+              label="Location"
+              value={formatCoord(result.flash_lat, result.flash_lon)}
+              className="col-span-2"
+            />
+            <MetaCell
+              label="Flash time (UTC)"
+              value={formatUtc(timestamp)}
+              className="col-span-2"
+            />
+          </dl>
         </div>
       </div>
+
+      <div>
+        <div className="mb-2.5">
+          <p className="text-[10px] font-medium tracking-[0.16em] text-muted-foreground uppercase">
+            Environmental conditions
+          </p>
+          <p className="mt-0.5 text-[13px] text-muted-foreground/80">
+            Environmental conditions at the time of the flash
+          </p>
+        </div>
+        <div className="grid gap-2.5 sm:grid-cols-2">
+          {primary.map(({ section, rows }) => (
+            <ConditionGroup
+              key={section.id}
+              emoji={section.emoji}
+              title={section.title}
+              blurb={section.blurb}
+              rows={rows}
+              sectionId={section.id}
+            />
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        {secondary.map(({ section, rows }) => (
+          <CollapsibleBlock
+            key={section.id}
+            title={`${section.emoji} ${section.title}`}
+            subtitle={section.blurb}
+          >
+            {section.id === "seasonality" ? (
+              <div className="space-y-2.5">
+                <p className="text-[13px] leading-snug text-muted-foreground/85">
+                  These sine and cosine values encode the flash’s time of year as a continuous
+                  annual cycle so the model can use seasonality without calendar discontinuities.
+                  They are technical model variables, not direct environmental measurements.
+                </p>
+                <dl className="grid gap-x-4 gap-y-1.5 sm:grid-cols-2">
+                  {rows.map((row) => (
+                    <ValueRow key={row.name} row={row} technical />
+                  ))}
+                </dl>
+              </div>
+            ) : (
+              <dl className="grid gap-x-4 gap-y-1.5 sm:grid-cols-2">
+                {rows.map((row) => (
+                  <ValueRow key={row.name} row={row} />
+                ))}
+              </dl>
+            )}
+          </CollapsibleBlock>
+        ))}
+      </div>
     </section>
+  );
+}
+
+function ConditionGroup({
+  emoji,
+  title,
+  blurb,
+  rows,
+  sectionId,
+}: {
+  emoji: string;
+  title: string;
+  blurb: string;
+  rows: SectionFeatureRow[];
+  sectionId: string;
+}) {
+  return (
+    <div className="rounded-md border border-white/8 bg-black/22 px-3 py-2.5">
+      <div className="mb-2 flex items-start gap-2">
+        <span className="mt-0.5 text-[14px] leading-none" aria-hidden>
+          {emoji}
+        </span>
+        <div className="min-w-0">
+          <p className="text-[13px] font-medium text-foreground/95">{title}</p>
+          <p className="text-[11.5px] leading-snug text-muted-foreground/75">{blurb}</p>
+        </div>
+      </div>
+      {sectionId === "vegetation" ? (
+        <p className="mb-2 text-[11.5px] leading-snug text-muted-foreground/70">
+          NDVI and NDWI each range from −1 to +1. Higher NDVI generally corresponds to greener
+          vegetation; higher NDWI generally corresponds to a stronger vegetation moisture signal.
+        </p>
+      ) : null}
+      <dl className="space-y-1.5 border-t border-white/6 pt-2">
+        {rows.map((row) => (
+          <ValueRow key={row.name} row={row} showHint />
+        ))}
+      </dl>
+    </div>
+  );
+}
+
+function ValueRow({
+  row,
+  showHint = false,
+  technical = false,
+}: {
+  row: SectionFeatureRow;
+  showHint?: boolean;
+  technical?: boolean;
+}) {
+  return (
+    <div className="grid grid-cols-[minmax(0,1.2fr)_minmax(0,0.9fr)] items-baseline gap-x-3">
+      <dt className="min-w-0">
+        <span
+          className={cn(
+            "block truncate text-[12.5px]",
+            technical ? "font-mono text-[12px] text-muted-foreground/80" : "text-muted-foreground",
+          )}
+        >
+          {row.label}
+        </span>
+        {showHint && row.hint ? (
+          <span className="block truncate text-[11px] text-muted-foreground/65">{row.hint}</span>
+        ) : null}
+      </dt>
+      <dd
+        className={cn(
+          "text-right tabular-nums text-foreground/92",
+          technical ? "font-mono text-[13px]" : "text-[13.5px]",
+        )}
+      >
+        <span>{row.displayText}</span>
+        {row.unit ? (
+          <span className="ml-1 text-[11px] text-muted-foreground/70">{row.unit}</span>
+        ) : null}
+      </dd>
+    </div>
+  );
+}
+
+function CollapsibleBlock({
+  title,
+  subtitle,
+  children,
+  defaultOpen = false,
+}: {
+  title: string;
+  subtitle: string;
+  children: ReactNode;
+  defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="rounded-md border border-white/8 bg-black/15">
+      <button
+        type="button"
+        className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left transition-colors hover:bg-white/[0.03]"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <span className="min-w-0">
+          <span className="block text-[13px] font-medium text-foreground/90">{title}</span>
+          <span className="mt-0.5 block text-[11.5px] text-muted-foreground/75">{subtitle}</span>
+        </span>
+        <ChevronDown
+          className={cn(
+            "size-4 shrink-0 text-muted-foreground transition-transform duration-200",
+            open && "rotate-180",
+          )}
+          aria-hidden
+        />
+      </button>
+      {open ? <div className="border-t border-white/8 px-3 py-2.5">{children}</div> : null}
+    </div>
   );
 }
 
@@ -197,9 +277,9 @@ function ScoreScale({
   scoreLabel: string;
 }) {
   return (
-    <div className="space-y-1.5" aria-hidden={false}>
+    <div className="space-y-1.5">
       <div
-        className="relative h-2.5 rounded-full"
+        className="relative h-2 rounded-full"
         role="img"
         aria-label={`FlashRisk Score ${scoreLabel} on a scale from 0 to 100`}
         style={{
@@ -209,11 +289,11 @@ function ScoreScale({
         }}
       >
         <span
-          className="absolute top-1/2 size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-[oklch(0.98_0.01_95)] bg-[oklch(0.2_0.02_258)] shadow-[0_0_0_3px_oklch(0.72_0.17_50/0.35),0_2px_8px_oklch(0_0_0/0.45)]"
+          className="absolute top-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-[oklch(0.98_0.01_95)] bg-[oklch(0.2_0.02_258)] shadow-[0_0_0_3px_oklch(0.72_0.17_50/0.35),0_2px_8px_oklch(0_0_0/0.45)]"
           style={{ left: `${markerPercent}%` }}
         />
       </div>
-      <div className="flex justify-between text-[10px] tabular-nums text-muted-foreground/75">
+      <div className="flex justify-between text-[10px] tabular-nums text-muted-foreground/70">
         <span>0</span>
         <span>50</span>
         <span>100</span>
@@ -222,25 +302,21 @@ function ScoreScale({
   );
 }
 
-function ContextChip({
-  icon,
+function MetaCell({
   label,
   value,
-  detail,
+  className,
 }: {
-  icon: ReactNode;
   label: string;
   value: string;
-  detail: string;
+  className?: string;
 }) {
   return (
-    <div className="rounded-md border border-white/8 bg-black/20 px-2.5 py-2">
-      <p className="flex items-center gap-1.5 text-[10px] font-medium tracking-[0.14em] text-muted-foreground uppercase">
-        {icon}
+    <div className={cn("min-w-0", className)}>
+      <dt className="text-[10px] font-medium tracking-[0.12em] text-muted-foreground/80 uppercase">
         {label}
-      </p>
-      <p className="mt-1 truncate text-[12.5px] font-medium text-foreground/95">{value}</p>
-      <p className="mt-0.5 truncate text-[10.5px] text-muted-foreground/85">{detail}</p>
+      </dt>
+      <dd className="mt-0.5 truncate text-[13.5px] text-foreground/92">{value}</dd>
     </div>
   );
 }

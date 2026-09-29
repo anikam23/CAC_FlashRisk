@@ -19,6 +19,7 @@ import {
 import type { GlmFlash, GlmFlashReconstruction } from "@/lib/api";
 import { BASEMAP_STYLE_URL } from "@/lib/config";
 import { convexHullLonLat } from "@/lib/convex-hull";
+import { cn } from "cn";
 
 const MAPLIBRE_WORKER_URL = "/maplibre/maplibre-gl-worker.mjs";
 const SEARCH_AREA_SOURCE = "lightning-search-area";
@@ -879,6 +880,8 @@ type CaliforniaMapProps = {
   selectedFlashId: string | null;
   reconstruction: GlmFlashReconstruction | null;
   playbackGlmMs: number;
+  /** True while reconstruction timeline is advancing. */
+  playing?: boolean;
   /** True after the user presses Play — dims siblings and shows reconstruction layers. */
   reconstructionFocus: boolean;
   /** Incremented when Play should fit the map to the reconstruction extent. */
@@ -901,6 +904,7 @@ export function CaliforniaMap({
   selectedFlashId,
   reconstruction,
   playbackGlmMs,
+  playing = false,
   reconstructionFocus,
   reconstructionCameraNonce,
   focusNonce,
@@ -913,6 +917,16 @@ export function CaliforniaMap({
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markerRef = useRef<maplibregl.Marker | null>(null);
   const flashMarkersRef = useRef<Map<string, maplibregl.Marker>>(new Map());
+  const playbackHudFadeTimerRef = useRef<number | null>(null);
+  const wasPlayingRef = useRef(false);
+  const [playbackHud, setPlaybackHud] = useState<{
+    observed: number;
+    total: number;
+    ms: number;
+    x: number;
+    y: number;
+    phase: "live" | "complete" | "fading";
+  } | null>(null);
   const flashesRef = useRef(flashes);
   const onSelectRef = useRef(onSelectLocation);
   const onSelectFlashRef = useRef(onSelectFlash);
@@ -1042,6 +1056,10 @@ export function CaliforniaMap({
       observer.disconnect();
       markerRef.current?.remove();
       markerRef.current = null;
+      if (playbackHudFadeTimerRef.current !== null) {
+        window.clearTimeout(playbackHudFadeTimerRef.current);
+        playbackHudFadeTimerRef.current = null;
+      }
       for (const marker of flashMarkers.values()) marker.remove();
       flashMarkers.clear();
       mapRef.current = null;
@@ -1088,54 +1106,47 @@ export function CaliforniaMap({
     const map = mapRef.current;
     if (!map) return;
 
-    const syncFlashes = () => {
-      if (!map.isStyleLoaded()) return;
+    // HTML Markers are DOM overlays and must not wait on isStyleLoaded().
+    // GeoJSON search-radius setData can briefly make isStyleLoaded() false in the
+    // same commit as a flash refresh (Update Search with a new committed radius),
+    // and map.once("load") never re-fires after the initial map load.
+    const nextIds = new Set(flashes.map((flash) => flash.global_flash_id));
 
-      const nextIds = new Set(flashes.map((flash) => flash.global_flash_id));
-
-      for (const [id, marker] of flashMarkersRef.current) {
-        if (!nextIds.has(id)) {
-          marker.remove();
-          flashMarkersRef.current.delete(id);
-        }
+    for (const [id, marker] of flashMarkersRef.current) {
+      if (!nextIds.has(id)) {
+        marker.remove();
+        flashMarkersRef.current.delete(id);
       }
-
-      for (const flash of flashes) {
-        const selected = flash.global_flash_id === selectedFlashId;
-        const dimmed = reconstructionFocus && !selected;
-        let marker = flashMarkersRef.current.get(flash.global_flash_id);
-        if (!marker) {
-          const element = createFlashMarkerElement(selected, dimmed);
-          element.dataset.flashId = flash.global_flash_id;
-          const selectFlash = (event: Event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            const id = (event.currentTarget as HTMLElement).dataset.flashId;
-            if (!id) return;
-            const current = flashesRef.current.find((item) => item.global_flash_id === id);
-            if (current) onSelectFlashRef.current(current);
-          };
-          // Stop map-background deselection / location pick when interacting with a flash.
-          element.addEventListener("pointerdown", (event) => event.stopPropagation());
-          element.addEventListener("mousedown", (event) => event.stopPropagation());
-          element.addEventListener("click", selectFlash);
-          marker = new maplibregl.Marker({ element, anchor: "center" })
-            .setLngLat([flash.flash_lon, flash.flash_lat])
-            .addTo(map);
-          flashMarkersRef.current.set(flash.global_flash_id, marker);
-        } else {
-          marker.setLngLat([flash.flash_lon, flash.flash_lat]);
-          applyFlashMarkerState(marker.getElement(), selected, dimmed);
-        }
-      }
-    };
-
-    if (map.isStyleLoaded()) {
-      syncFlashes();
-      return;
     }
 
-    map.once("load", syncFlashes);
+    for (const flash of flashes) {
+      const selected = flash.global_flash_id === selectedFlashId;
+      const dimmed = reconstructionFocus && !selected;
+      let marker = flashMarkersRef.current.get(flash.global_flash_id);
+      if (!marker) {
+        const element = createFlashMarkerElement(selected, dimmed);
+        element.dataset.flashId = flash.global_flash_id;
+        const selectFlash = (event: Event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          const id = (event.currentTarget as HTMLElement).dataset.flashId;
+          if (!id) return;
+          const current = flashesRef.current.find((item) => item.global_flash_id === id);
+          if (current) onSelectFlashRef.current(current);
+        };
+        // Stop map-background deselection / location pick when interacting with a flash.
+        element.addEventListener("pointerdown", (event) => event.stopPropagation());
+        element.addEventListener("mousedown", (event) => event.stopPropagation());
+        element.addEventListener("click", selectFlash);
+        marker = new maplibregl.Marker({ element, anchor: "center" })
+          .setLngLat([flash.flash_lon, flash.flash_lat])
+          .addTo(map);
+        flashMarkersRef.current.set(flash.global_flash_id, marker);
+      } else {
+        marker.setLngLat([flash.flash_lon, flash.flash_lat]);
+        applyFlashMarkerState(marker.getElement(), selected, dimmed);
+      }
+    }
   }, [flashes, selectedFlashId, reconstructionFocus]);
 
   useEffect(() => {
@@ -1154,6 +1165,107 @@ export function CaliforniaMap({
 
     map.once("load", syncReconstruction);
   }, [reconstruction, playbackGlmMs, reconstructionFocus]);
+
+  // Temporary playback HUD near the reconstruction — React overlay (not a MapLibre marker),
+  // so it stays visible above the canvas and tracks map projection.
+  useEffect(() => {
+    const map = mapRef.current;
+
+    const clearFadeTimer = () => {
+      if (playbackHudFadeTimerRef.current !== null) {
+        window.clearTimeout(playbackHudFadeTimerRef.current);
+        playbackHudFadeTimerRef.current = null;
+      }
+    };
+
+    const projectHud = (): { x: number; y: number } | null => {
+      if (!map || !reconstruction) return null;
+      // Slightly above/right of flash center so the badge does not cover the flash
+      // pulse, event markers, or observed-extent geometry.
+      const point = map.project([reconstruction.flash_lon, reconstruction.flash_lat]);
+      return { x: point.x + 16, y: point.y - 36 };
+    };
+
+    if (!map || !reconstruction || !reconstructionFocus) {
+      clearFadeTimer();
+      wasPlayingRef.current = false;
+      setPlaybackHud(null);
+      return;
+    }
+
+    const observed = reconstruction.events.reduce(
+      (count, event) => count + (event.animation_offset_ms <= playbackGlmMs + 0.05 ? 1 : 0),
+      0,
+    );
+    const total = reconstruction.total_events;
+    const atEnd = playbackGlmMs >= reconstruction.animation_end_ms - 0.05;
+    const pos = projectHud();
+    if (!pos) return;
+
+    if (playing) {
+      wasPlayingRef.current = true;
+      clearFadeTimer();
+      setPlaybackHud({
+        observed,
+        total,
+        ms: playbackGlmMs,
+        x: pos.x,
+        y: pos.y,
+        phase: "live",
+      });
+      return;
+    }
+
+    // Natural completion: brief hold of final count, then fade.
+    if (wasPlayingRef.current && atEnd) {
+      setPlaybackHud({
+        observed,
+        total,
+        ms: playbackGlmMs,
+        x: pos.x,
+        y: pos.y,
+        phase: "complete",
+      });
+      clearFadeTimer();
+      playbackHudFadeTimerRef.current = window.setTimeout(() => {
+        setPlaybackHud((current) => (current ? { ...current, phase: "fading" } : null));
+        playbackHudFadeTimerRef.current = window.setTimeout(() => {
+          wasPlayingRef.current = false;
+          setPlaybackHud(null);
+          playbackHudFadeTimerRef.current = null;
+        }, 420);
+      }, 1600);
+      return () => clearFadeTimer();
+    }
+
+    // Mid-playback pause / seek: hide immediately.
+    clearFadeTimer();
+    wasPlayingRef.current = false;
+    setPlaybackHud(null);
+  }, [reconstruction, playbackGlmMs, reconstructionFocus, playing]);
+
+  // Keep the HUD anchored in screen space when the map pans/zooms during playback.
+  const hudVisible = playbackHud !== null;
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !reconstruction || !hudVisible) return;
+
+    const syncPosition = () => {
+      const point = map.project([reconstruction.flash_lon, reconstruction.flash_lat]);
+      setPlaybackHud((current) =>
+        current
+          ? { ...current, x: point.x + 16, y: point.y - 36 }
+          : null,
+      );
+    };
+
+    map.on("move", syncPosition);
+    map.on("zoom", syncPosition);
+    return () => {
+      map.off("move", syncPosition);
+      map.off("zoom", syncPosition);
+    };
+  }, [reconstruction, hudVisible]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -1211,6 +1323,34 @@ export function CaliforniaMap({
         role="region"
         aria-label="Map of California"
       />
+      {playbackHud ? (
+        <div
+          className="pointer-events-none absolute z-20"
+          style={{
+            left: playbackHud.x,
+            top: playbackHud.y,
+            transform: "translate(0, -100%)",
+          }}
+        >
+          <div
+            className={cn(
+              "recon-playback-hud",
+              playbackHud.phase === "complete" && "is-complete",
+              playbackHud.phase === "fading" && "is-fading",
+            )}
+            role="status"
+            aria-live="polite"
+            aria-label={`${playbackHud.observed} of ${playbackHud.total} events observed`}
+          >
+            <span className="recon-playback-hud__count">
+              {playbackHud.observed} / {playbackHud.total}
+            </span>
+            <span className="recon-playback-hud__meta">
+              events · {Math.round(playbackHud.ms)} ms
+            </span>
+          </div>
+        </div>
+      ) : null}
       {error && (
         <div className="pointer-events-none absolute inset-x-0 bottom-6 flex justify-center px-4">
           <p className="max-w-md rounded-md border border-white/10 bg-black/70 px-3 py-2 text-center text-xs text-muted-foreground backdrop-blur-md">

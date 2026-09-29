@@ -67,22 +67,30 @@ export function ConfirmDialog({
         <h2 id={titleId} className="text-[15px] font-semibold tracking-tight text-foreground">
           {title}
         </h2>
-        <div id={descriptionId} className="mt-2 text-[13px] leading-relaxed text-muted-foreground">
+        <div id={descriptionId} className="mt-2 text-[14px] leading-relaxed text-muted-foreground">
           {description}
         </div>
         <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          {/* Secondary destructive/continue action */}
           <Button
             type="button"
             variant="secondary"
+            size="sm"
+            className="sm:min-w-[7.5rem]"
+            onClick={onConfirm}
+          >
+            {confirmLabel}
+          </Button>
+          {/* Primary: preserve completed analysis */}
+          <Button
+            type="button"
+            variant="default"
             size="sm"
             className="sm:min-w-[9.5rem]"
             autoFocus
             onClick={onCancel}
           >
             {cancelLabel}
-          </Button>
-          <Button type="button" size="sm" className="sm:min-w-[7.5rem]" onClick={onConfirm}>
-            {confirmLabel}
           </Button>
         </div>
       </div>

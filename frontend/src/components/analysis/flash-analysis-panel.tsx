@@ -89,22 +89,31 @@ export function FlashAnalysisPanel({
   onReset,
   onSeekGlmMs,
 }: FlashAnalysisPanelProps) {
+  const analysisReady = analysisState === "ready" && analysisResult !== null;
   const animationEnd = reconstruction?.animation_end_ms ?? 0;
   const progress = animationEnd > 0 ? Math.min(1, playbackGlmMs / animationEnd) : 0;
 
   return (
-    <aside aria-label="Selected flash" className={cn("panel px-4 py-4 sm:px-5", className)}>
+    <aside
+      aria-label={analysisReady ? "FlashRisk investigation workspace" : "Selected flash"}
+      className={cn("panel px-4 py-4 sm:px-5", className)}
+    >
       <div className="flex items-start justify-between gap-2">
-        <h2 className="text-[10px] font-medium tracking-[0.18em] text-muted-foreground uppercase">
-          Selected flash
-        </h2>
+        <div className="min-w-0">
+          <h2 className="text-[10px] font-medium tracking-[0.18em] text-muted-foreground uppercase">
+            {analysisReady ? "Investigation" : "Selected flash"}
+          </h2>
+          {analysisReady && flash ? (
+            <p className="mt-1 truncate text-[13px] text-foreground/85">Flash {flash.flash_id}</p>
+          ) : null}
+        </div>
         {flash && onClearSelection ? (
           <button
             type="button"
             onClick={onClearSelection}
             className="-mt-0.5 -mr-1 inline-flex size-6 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-white/6 hover:text-foreground"
-            aria-label="Clear selected flash"
-            title="Clear selection"
+            aria-label={analysisReady ? "Close analysis" : "Clear selected flash"}
+            title={analysisReady ? "Close analysis" : "Clear selection"}
           >
             <X className="size-3.5" aria-hidden />
           </button>
@@ -116,10 +125,28 @@ export function FlashAnalysisPanel({
           <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full border border-white/10 text-muted-foreground">
             <Zap className="size-3.5" aria-hidden />
           </span>
-          <p className="text-[13px] leading-relaxed text-foreground/80">
+          <p className="text-[14px] leading-relaxed text-foreground/80">
             Select a lightning flash to inspect and analyze
           </p>
         </div>
+      ) : analysisReady && analysisResult ? (
+        <AnalyzedWorkspace
+          key={analysisResult.global_flash_id}
+          flash={flash}
+          result={analysisResult}
+          reconstruction={reconstruction}
+          reconstructionState={reconstructionState}
+          reconstructionError={reconstructionError}
+          playbackGlmMs={playbackGlmMs}
+          progress={progress}
+          playing={playing}
+          reconstructionActive={reconstructionActive}
+          onPlay={onPlay}
+          onPause={onPause}
+          onReplay={onReplay}
+          onReset={onReset}
+          onSeekGlmMs={onSeekGlmMs}
+        />
       ) : (
         <SelectedFlashBody
           flash={flash}
@@ -142,6 +169,243 @@ export function FlashAnalysisPanel({
         />
       )}
     </aside>
+  );
+}
+
+function AnalyzedWorkspace({
+  flash,
+  result,
+  reconstruction,
+  reconstructionState,
+  reconstructionError,
+  playbackGlmMs,
+  progress,
+  playing,
+  reconstructionActive,
+  onPlay,
+  onPause,
+  onReplay,
+  onReset,
+  onSeekGlmMs,
+}: {
+  flash: GlmFlash;
+  result: AnalyzeFlashResponse;
+  reconstruction: GlmFlashReconstruction | null;
+  reconstructionState: ReconstructionState;
+  reconstructionError: string | null;
+  playbackGlmMs: number;
+  progress: number;
+  playing: boolean;
+  reconstructionActive: boolean;
+  onPlay?: () => void;
+  onPause?: () => void;
+  onReplay?: () => void;
+  onReset?: () => void;
+  onSeekGlmMs?: (ms: number) => void;
+}) {
+  const [workspaceView, setWorkspaceView] = useState<"analysis" | "lightning">("analysis");
+
+  return (
+    <div className="mt-3 flex flex-col gap-4">
+      <div
+        className="grid grid-cols-2 gap-1 rounded-md border border-white/10 bg-black/25 p-1"
+        role="tablist"
+        aria-label="Investigation views"
+      >
+        <WorkspaceTab
+          selected={workspaceView === "analysis"}
+          onClick={() => setWorkspaceView("analysis")}
+        >
+          Analysis
+        </WorkspaceTab>
+        <WorkspaceTab
+          selected={workspaceView === "lightning"}
+          onClick={() => setWorkspaceView("lightning")}
+        >
+          Lightning
+        </WorkspaceTab>
+      </div>
+
+      {workspaceView === "analysis" ? (
+        <AnalysisReport result={result} flash={flash} />
+      ) : (
+        <LightningDetailView
+          flash={flash}
+          reconstruction={reconstruction}
+          reconstructionState={reconstructionState}
+          reconstructionError={reconstructionError}
+          playbackGlmMs={playbackGlmMs}
+          progress={progress}
+          playing={playing}
+          reconstructionActive={reconstructionActive}
+          onPlay={onPlay}
+          onPause={onPause}
+          onReplay={onReplay}
+          onReset={onReset}
+          onSeekGlmMs={onSeekGlmMs}
+        />
+      )}
+    </div>
+  );
+}
+
+function WorkspaceTab({
+  selected,
+  onClick,
+  children,
+}: {
+  selected: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={selected}
+      onClick={onClick}
+      className={cn(
+        "h-8 rounded-[5px] text-[13px] font-medium transition-colors duration-150",
+        selected
+          ? "bg-primary/15 text-primary shadow-[inset_0_0_0_1px_oklch(0.72_0.17_50/0.4)]"
+          : "text-muted-foreground hover:bg-white/4 hover:text-foreground",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+function LightningDetailView({
+  flash,
+  reconstruction,
+  reconstructionState,
+  reconstructionError,
+  playbackGlmMs,
+  progress,
+  playing,
+  reconstructionActive,
+  onPlay,
+  onPause,
+  onReplay,
+  onReset,
+  onSeekGlmMs,
+}: {
+  flash: GlmFlash;
+  reconstruction: GlmFlashReconstruction | null;
+  reconstructionState: ReconstructionState;
+  reconstructionError: string | null;
+  playbackGlmMs: number;
+  progress: number;
+  playing: boolean;
+  reconstructionActive: boolean;
+  onPlay?: () => void;
+  onPause?: () => void;
+  onReplay?: () => void;
+  onReset?: () => void;
+  onSeekGlmMs?: (ms: number) => void;
+}) {
+  const features = reconstruction ?? flash;
+
+  return (
+    <div className="flex flex-col gap-3">
+      <p className="text-[12.5px] leading-snug text-muted-foreground">
+        GLM flash details and event reconstruction. Switch to Analysis anytime to return to the
+        completed report.
+      </p>
+
+      <section
+        aria-label="Selected flash"
+        className="rounded-md border border-white/8 bg-black/22 px-3 py-2.5"
+      >
+        <div className="flex items-start gap-3">
+          <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full border border-primary/35 bg-primary/10 text-primary">
+            <Zap className="size-3.5" aria-hidden />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-medium tracking-[0.14em] text-muted-foreground uppercase">
+              Selected flash
+            </p>
+            <p className="mt-1 text-[15px] font-medium leading-snug text-foreground">
+              Flash {flash.flash_id}
+            </p>
+          </div>
+        </div>
+
+        {/* Wide workspace: tight label/value pairs, not full-card stretch */}
+        <dl className="mt-3 flex flex-col gap-2.5 border-t border-white/6 pt-2.5 text-[13.5px]">
+          <MetaRow
+            label="UTC time"
+            value={formatUtc(flash.flash_start_time)}
+            nowrap
+            pair
+          />
+          <div className="flex flex-wrap gap-x-10 gap-y-2.5">
+            <MetaRow
+              label="Distance"
+              value={`${flash.distance_km.toFixed(2)} km`}
+              pair
+            />
+            <MetaRow
+              label="Coordinates"
+              value={formatCoord(flash.flash_lat, flash.flash_lon)}
+              nowrap
+              pair
+            />
+          </div>
+        </dl>
+        <details className="mt-2.5 border-t border-white/6 pt-2">
+          <summary className="cursor-pointer text-[13px] text-muted-foreground/80 transition-colors hover:text-muted-foreground">
+            Source granule
+          </summary>
+          <p className="mt-1.5 break-all font-mono text-[11px] leading-snug text-muted-foreground/70">
+            {flash.source_file}
+          </p>
+        </details>
+      </section>
+
+      <section
+        aria-label="GLM characteristics"
+        className="rounded-md border border-white/8 bg-black/22 px-3 py-2.5"
+      >
+        <SectionLabel>GLM characteristics</SectionLabel>
+        <dl className="mt-2.5 grid gap-x-10 gap-y-2.5 text-[13.5px] sm:grid-cols-2">
+          <MetaRow label="Energy" value={formatEnergy(features.flash_energy)} pair />
+          <MetaRow label="Area" value={formatArea(features.flash_area)} pair />
+          <MetaRow label="Duration" value={`${features.flash_duration_ms.toFixed(1)} ms`} pair />
+          <MetaRow label="Groups" value={String(features.group_count)} pair />
+          <MetaRow label="Max Group Area" value={formatArea(features.max_group_area)} pair />
+          <MetaRow label="Max Group Energy" value={formatEnergy(features.max_group_energy)} pair />
+          <MetaRow
+            label="Max Events / Group"
+            value={String(features.max_events_per_group)}
+            pair
+          />
+          <MetaRow label="Total Events" value={String(features.total_events)} pair />
+        </dl>
+      </section>
+
+      <section
+        aria-label="Reconstruction"
+        className="rounded-md border border-white/8 bg-black/22 px-3 py-2.5"
+      >
+        <ReconstructionControls
+          state={reconstructionState}
+          error={reconstructionError}
+          reconstruction={reconstruction}
+          playbackGlmMs={playbackGlmMs}
+          progress={progress}
+          playing={playing}
+          reconstructionActive={reconstructionActive}
+          onPlay={onPlay}
+          onPause={onPause}
+          onReplay={onReplay}
+          onReset={onReset}
+          onSeekGlmMs={onSeekGlmMs}
+          layout="wide"
+        />
+      </section>
+    </div>
   );
 }
 
@@ -193,23 +457,28 @@ function SelectedFlashBody({
             <Zap className="size-3.5" aria-hidden />
           </span>
           <div className="min-w-0 flex-1">
-            <p className="text-[14px] font-medium leading-snug text-foreground">
+            <p className="text-[15px] font-medium leading-snug text-foreground">
               Flash {flash.flash_id}
             </p>
-            <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{flash.source_file}</p>
+            <p
+              className="mt-0.5 truncate text-[13px] text-muted-foreground"
+              title={flash.source_file}
+            >
+              {flash.source_file}
+            </p>
           </div>
         </div>
 
-        <dl className="mt-3.5 space-y-2 text-[12.5px]">
-          <MetaRow label="UTC time" value={formatUtc(flash.flash_start_time)} />
-          <MetaRow label="Coordinates" value={formatCoord(flash.flash_lat, flash.flash_lon)} />
+        <dl className="mt-3.5 space-y-2 text-[13.5px]">
+          <MetaRow label="UTC time" value={formatUtc(flash.flash_start_time)} nowrap />
+          <MetaRow label="Coordinates" value={formatCoord(flash.flash_lat, flash.flash_lon)} nowrap />
           <MetaRow label="Distance" value={`${flash.distance_km.toFixed(2)} km`} />
         </dl>
       </section>
 
       <section aria-label="GLM characteristics">
         <SectionLabel>GLM characteristics</SectionLabel>
-        <dl className="mt-2.5 space-y-2 text-[12.5px]">
+        <dl className="mt-2.5 space-y-2 text-[13.5px]">
           <MetaRow label="Energy" value={formatEnergy(features.flash_energy)} />
           <MetaRow label="Area" value={formatArea(features.flash_area)} />
           <MetaRow label="Duration" value={`${features.flash_duration_ms.toFixed(1)} ms`} />
@@ -281,11 +550,10 @@ function AnalysisStatus({
     return (
       <section aria-label="Analysis" aria-busy="true">
         <SectionLabel>Analysis</SectionLabel>
-        <div className="mt-2.5 flex items-start gap-2 text-[12px] leading-snug text-muted-foreground">
+        <div className="mt-2.5 flex items-start gap-2 text-[13px] leading-snug text-muted-foreground">
           <LoaderCircle className="mt-0.5 size-3.5 shrink-0 animate-spin text-primary/80" aria-hidden />
           <span>
-            Running environmental retrieval and frozen-model scoring. This can take several
-            minutes…
+            Running environmental retrieval and model scoring. This can take several minutes…
           </span>
         </div>
       </section>
@@ -296,7 +564,7 @@ function AnalysisStatus({
     return (
       <section aria-label="Analysis">
         <SectionLabel>Analysis</SectionLabel>
-        <p className="mt-2.5 text-[12px] leading-snug text-amber-100/85">
+        <p className="mt-2.5 text-[13px] leading-snug text-amber-100/85">
           {error ?? "Analyze failed. Try again after checking backend connectivity."}
         </p>
       </section>
@@ -321,6 +589,7 @@ function ReconstructionControls({
   onReplay,
   onReset,
   onSeekGlmMs,
+  layout = "compact",
 }: {
   state: ReconstructionState;
   error: string | null;
@@ -334,9 +603,12 @@ function ReconstructionControls({
   onReplay?: () => void;
   onReset?: () => void;
   onSeekGlmMs?: (ms: number) => void;
+  /** Wide post-analysis workspace vs compact pre-analysis panel. */
+  layout?: "compact" | "wide";
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState(false);
+  const wide = layout === "wide";
 
   useEffect(() => {
     if (!dragging) return;
@@ -357,24 +629,24 @@ function ReconstructionControls({
 
   if (state === "loading") {
     return (
-      <section aria-label="Reconstruction">
+      <div>
         <SectionLabel>Reconstruction</SectionLabel>
-        <div className="mt-2.5 flex items-center gap-2 text-[12px] text-muted-foreground">
+        <div className="mt-2.5 flex items-center gap-2 text-[13px] text-muted-foreground">
           <LoaderCircle className="size-3.5 animate-spin text-primary/80" aria-hidden />
           Loading flash reconstruction…
         </div>
-      </section>
+      </div>
     );
   }
 
   if (state === "error") {
     return (
-      <section aria-label="Reconstruction">
+      <div>
         <SectionLabel>Reconstruction</SectionLabel>
-        <p className="mt-2.5 text-[12px] leading-snug text-amber-100/85">
+        <p className="mt-2.5 text-[13px] leading-snug text-amber-100/85">
           {error ?? "Could not load flash reconstruction."}
         </p>
-      </section>
+      </div>
     );
   }
 
@@ -389,9 +661,11 @@ function ReconstructionControls({
   const observedEvents = countObservedEvents(reconstruction, playbackGlmMs);
   const groupCount = reconstruction.group_count;
   const observedSpanLabel = formatObservedSpanKm(observedEventSpanKm(reconstruction.events));
+  const spanDisplay =
+    observedSpanLabel?.replace(/^Observed span\s*[·:]\s*/i, "") ?? "—";
 
   return (
-    <section aria-label="Reconstruction" className="min-w-0">
+    <div className="min-w-0">
       <div className="flex items-baseline justify-between gap-3">
         <SectionLabel>Reconstruction</SectionLabel>
         <p className="text-[10px] tabular-nums text-muted-foreground/80">
@@ -399,29 +673,55 @@ function ReconstructionControls({
         </p>
       </div>
 
-      <div className="mt-2.5 flex items-center gap-1.5">
-        <p className="text-[13px] tabular-nums text-foreground/95">
-          <span className="text-muted-foreground">Events observed</span>{" "}
-          <span className="font-medium text-foreground">
-            {observedEvents} / {totalEvents}
-          </span>
+      {wide ? (
+        <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 xl:grid-cols-4">
+          <ReconstructionMetric
+            label="Events observed"
+            value={`${observedEvents} / ${totalEvents}`}
+            accessory={<OverlapHint />}
+          />
+          <ReconstructionMetric label="Groups" value={String(groupCount)} />
+          <ReconstructionMetric label="Observed span" value={spanDisplay} />
+          <ReconstructionMetric label="GLM duration" value={`0–${durationLabel} ms`} />
+        </div>
+      ) : (
+        <>
+          <div className="mt-2.5 flex items-center gap-1.5">
+            <p className="text-[14px] tabular-nums text-foreground/95">
+              <span className="text-muted-foreground">Events observed</span>{" "}
+              <span className="font-medium text-foreground">
+                {observedEvents} / {totalEvents}
+              </span>
+            </p>
+            <OverlapHint />
+          </div>
+
+          <p className="mt-1 text-[13px] tabular-nums text-muted-foreground/90">
+            {totalEvents} events · {groupCount} groups
+          </p>
+
+          {observedSpanLabel ? (
+            <p className="mt-1.5 text-[13px] text-muted-foreground/90">{observedSpanLabel}</p>
+          ) : null}
+
+          <p className="mt-1.5 text-[13px] leading-snug text-muted-foreground/80">
+            0–{durationLabel} ms GLM duration · slowed {GLM_PLAYBACK_SLOWDOWN}× for visibility
+          </p>
+        </>
+      )}
+
+      {wide ? (
+        <p className="mt-2.5 text-[13px] leading-snug text-muted-foreground/80">
+          Playback slowed {GLM_PLAYBACK_SLOWDOWN}× for visibility
         </p>
-        <OverlapHint />
-      </div>
-
-      <p className="mt-1 text-[11px] tabular-nums text-muted-foreground/90">
-        {totalEvents} events · {groupCount} groups
-      </p>
-
-      {observedSpanLabel ? (
-        <p className="mt-1.5 text-[11px] text-muted-foreground/90">{observedSpanLabel}</p>
       ) : null}
 
-      <p className="mt-1.5 text-[11px] leading-snug text-muted-foreground/80">
-        0–{durationLabel} ms GLM duration · slowed {GLM_PLAYBACK_SLOWDOWN}× for visibility
-      </p>
-
-      <div className="mt-3 flex flex-wrap items-center gap-x-3.5 gap-y-1.5 text-[11px] text-muted-foreground">
+      <div
+        className={cn(
+          "flex flex-wrap items-center gap-x-3.5 gap-y-1.5 text-[13px] text-muted-foreground",
+          wide ? "mt-3" : "mt-3",
+        )}
+      >
         <span className="inline-flex items-center gap-1.5">
           <span
             className="inline-flex size-3.5 items-center justify-center text-[15px] font-medium leading-none text-[rgb(255,196,110)]"
@@ -467,7 +767,7 @@ function ReconstructionControls({
           <button
             type="button"
             onClick={onPause}
-            className="inline-flex h-7 items-center gap-1.5 rounded-md border border-white/10 bg-white/5 px-2.5 text-[11px] text-foreground/90 transition-colors hover:bg-white/8"
+            className="inline-flex h-7 items-center gap-1.5 rounded-md border border-white/10 bg-white/5 px-2.5 text-[13px] text-foreground/90 transition-colors hover:bg-white/8"
           >
             <Pause className="size-3" aria-hidden />
             Pause
@@ -476,7 +776,7 @@ function ReconstructionControls({
           <button
             type="button"
             onClick={atEnd ? onReplay : onPlay}
-            className="inline-flex h-7 items-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 px-2.5 text-[11px] text-primary transition-colors hover:bg-primary/15"
+            className="inline-flex h-7 items-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 px-2.5 text-[13px] text-primary transition-colors hover:bg-primary/15"
           >
             {atEnd ? (
               <>
@@ -495,7 +795,7 @@ function ReconstructionControls({
           <button
             type="button"
             onClick={onReplay}
-            className="inline-flex h-7 items-center gap-1.5 rounded-md border border-white/10 bg-transparent px-2 text-[11px] text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
+            className="inline-flex h-7 items-center gap-1.5 rounded-md border border-white/10 bg-transparent px-2 text-[13px] text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
           >
             <RotateCcw className="size-3" aria-hidden />
             Replay
@@ -505,14 +805,38 @@ function ReconstructionControls({
           <button
             type="button"
             onClick={onReset}
-            className="inline-flex h-7 items-center rounded-md px-2 text-[11px] text-muted-foreground/75 transition-colors hover:bg-white/4 hover:text-muted-foreground"
+            className="inline-flex h-7 items-center rounded-md px-2 text-[13px] text-muted-foreground/75 transition-colors hover:bg-white/4 hover:text-muted-foreground"
             title="Clear reconstruction visualization"
           >
             Reset
           </button>
         ) : null}
       </div>
-    </section>
+    </div>
+  );
+}
+
+function ReconstructionMetric({
+  label,
+  value,
+  accessory,
+}: {
+  label: string;
+  value: string;
+  accessory?: ReactNode;
+}) {
+  return (
+    <div className="min-w-0 rounded-md border border-white/6 bg-black/15 px-2.5 py-2">
+      <div className="flex items-center gap-1">
+        <p className="text-[10px] font-medium tracking-[0.12em] text-muted-foreground uppercase">
+          {label}
+        </p>
+        {accessory}
+      </div>
+      <p className="mt-1 truncate text-[13.5px] font-medium tabular-nums text-foreground/95">
+        {value}
+      </p>
+    </div>
   );
 }
 
@@ -575,11 +899,38 @@ function SectionLabel({ children }: { children: ReactNode }) {
   );
 }
 
-function MetaRow({ label, value }: { label: string; value: string }) {
+function MetaRow({
+  label,
+  value,
+  nowrap = false,
+  pair = false,
+  className,
+}: {
+  label: string;
+  value: string;
+  nowrap?: boolean;
+  /** Tight label/value association (wide workspace). Compact panels keep stretch layout. */
+  pair?: boolean;
+  className?: string;
+}) {
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] items-baseline gap-x-4 gap-y-0.5">
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="text-right break-words text-foreground/90 tabular-nums">{value}</dd>
+    <div
+      className={cn(
+        "flex min-w-0 items-baseline",
+        pair ? "w-fit max-w-full gap-2" : "justify-between gap-2.5",
+        className,
+      )}
+    >
+      <dt className="shrink-0 text-muted-foreground">{label}</dt>
+      <dd
+        className={cn(
+          "min-w-0 tabular-nums text-foreground/90",
+          pair ? "text-left" : "text-right",
+          nowrap ? "overflow-hidden text-ellipsis whitespace-nowrap" : "break-words",
+        )}
+      >
+        {value}
+      </dd>
     </div>
   );
 }

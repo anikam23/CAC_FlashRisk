@@ -36,6 +36,7 @@ import {
   type SearchWindowMinutes,
   type SelectedSearchLocation,
 } from "@/lib/search";
+import { cn } from "cn";
 
 type ReconstructionState = "idle" | "loading" | "ready" | "error";
 
@@ -43,10 +44,14 @@ type PendingGuard =
   | { kind: "switch-flash"; flash: GlmFlash }
   | { kind: "find-lightning" }
   | { kind: "change-search-area" }
+  | { kind: "close-analysis" }
   | null;
 
 const ANALYSIS_CLOSE_WARNING =
   "Your current analysis will be closed. Returning to this flash later may require running the analysis again.";
+
+const CLOSE_ANALYSIS_WARNING =
+  "Closing the analysis will return to the lightning search. Returning to this flash later may require running the analysis again.";
 
 export default function Home() {
   const [setup, setSetup] = useState<LightningSearchSetup>(createEmptySearchSetup);
@@ -191,6 +196,15 @@ export default function Home() {
     setPlaying(false);
     setPlaybackGlmMs(0);
     setReconstructionFocus(false);
+  };
+
+  /** Guard the investigation close control when a completed analysis is present. */
+  const requestClearSelection = () => {
+    if (analysisReadyRef.current) {
+      setPendingGuard({ kind: "close-analysis" });
+      return;
+    }
+    clearSelection();
   };
 
   const applyFlashSelection = (flash: GlmFlash) => {
@@ -430,6 +444,10 @@ export default function Home() {
     }
     if (pending.kind === "change-search-area") {
       beginChangeSearchArea();
+      return;
+    }
+    if (pending.kind === "close-analysis") {
+      clearSelection();
     }
   };
 
@@ -440,7 +458,14 @@ export default function Home() {
         ? "Start a new lightning search?"
         : pendingGuard?.kind === "change-search-area"
           ? "Change search area?"
-          : "";
+          : pendingGuard?.kind === "close-analysis"
+            ? "Close analysis?"
+            : "";
+
+  const guardDescription =
+    pendingGuard?.kind === "close-analysis"
+      ? CLOSE_ANALYSIS_WARNING
+      : ANALYSIS_CLOSE_WARNING;
 
   const guardConfirmLabel =
     pendingGuard?.kind === "switch-flash"
@@ -449,10 +474,12 @@ export default function Home() {
         ? "Start New Search"
         : pendingGuard?.kind === "change-search-area"
           ? "Change Search Area"
-          : "Continue";
+          : pendingGuard?.kind === "close-analysis"
+            ? "Close Analysis"
+            : "Continue";
 
   const guardCancelLabel =
-    pendingGuard?.kind === "switch-flash" ? "Keep Current Analysis" : "Keep Current Analysis";
+    pendingGuard?.kind === "close-analysis" ? "Keep Analysis" : "Keep Current Analysis";
 
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-background">
@@ -465,13 +492,14 @@ export default function Home() {
           selectedFlashId={selectedFlashId}
           reconstruction={reconstruction}
           playbackGlmMs={playbackGlmMs}
+          playing={playing}
           reconstructionFocus={reconstructionFocus}
           reconstructionCameraNonce={reconstructionCameraNonce}
           focusNonce={focusNonce}
           allowMapLocationPick={!investigationActive}
           onSelectLocation={handleMapSelect}
           onSelectFlash={selectFlash}
-          onDeselectFlash={clearSelection}
+          onDeselectFlash={requestClearSelection}
         />
         <div className="pointer-events-none absolute inset-0 z-10">
           <SearchPanel
@@ -489,14 +517,18 @@ export default function Home() {
               setSetup((current) => ({ ...current, windowMinutes }))
             }
             onRadiusChange={(radiusKm: SearchRadiusKm) => {
-              if (activeInvestigation) return;
               setSetup((current) => ({ ...current, radiusKm }));
             }}
             onFindLightning={handleFindLightning}
             onChangeSearchArea={handleChangeSearchArea}
           />
           <FlashAnalysisPanel
-            className="pointer-events-auto absolute right-4 bottom-4 left-4 max-h-[calc(100%-8.75rem)] overflow-y-auto xl:top-4 xl:right-4 xl:bottom-auto xl:left-auto xl:max-h-[calc(100%-2rem)] xl:w-[min(22.5rem,calc(100%-2rem))] 2xl:w-[23.5rem]"
+            className={cn(
+              "pointer-events-auto absolute right-4 bottom-4 left-4 max-h-[calc(100%-8.75rem)] overflow-y-auto xl:top-4 xl:right-4 xl:bottom-auto xl:left-auto xl:max-h-[calc(100%-2rem)]",
+              analysisState === "ready"
+                ? "xl:w-[min(38rem,calc(100%-22rem))] 2xl:w-[min(42rem,calc(100%-23rem))]"
+                : "xl:w-[min(24.5rem,calc(100%-2rem))] 2xl:w-[25.5rem]",
+            )}
             flash={selectedFlash}
             reconstruction={reconstruction}
             reconstructionState={reconstructionState}
@@ -507,7 +539,7 @@ export default function Home() {
             playbackGlmMs={playbackGlmMs}
             playing={playing}
             reconstructionActive={reconstructionFocus}
-            onClearSelection={clearSelection}
+            onClearSelection={requestClearSelection}
             onAnalyze={handleAnalyze}
             onPlay={() => beginReconstructionPlayback(false)}
             onPause={() => setPlaying(false)}
@@ -522,7 +554,7 @@ export default function Home() {
         <ConfirmDialog
           open={pendingGuard !== null}
           title={guardTitle}
-          description={ANALYSIS_CLOSE_WARNING}
+          description={guardDescription}
           cancelLabel={guardCancelLabel}
           confirmLabel={guardConfirmLabel}
           onCancel={dismissGuard}

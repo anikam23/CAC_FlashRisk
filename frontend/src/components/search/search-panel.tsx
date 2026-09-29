@@ -22,7 +22,7 @@ import {
 import { cn } from "cn";
 
 const fieldClass =
-  "h-9 w-full min-w-0 rounded-md border border-white/10 bg-black/30 px-2.5 text-[13px] text-foreground outline-none transition-[border-color,box-shadow] duration-150 placeholder:text-muted-foreground/55 focus-visible:border-primary/45 focus-visible:ring-2 focus-visible:ring-primary/15";
+  "h-9 w-full min-w-0 rounded-md border border-white/10 bg-black/30 px-2.5 text-[14px] text-foreground outline-none transition-[border-color,box-shadow] duration-150 placeholder:text-muted-foreground/55 focus-visible:border-primary/45 focus-visible:ring-2 focus-visible:ring-primary/15";
 
 function FieldLabel({ htmlFor, children }: { htmlFor: string; children: string }) {
   return (
@@ -239,7 +239,7 @@ export function SearchPanel({
               className="absolute top-[calc(100%+6px)] right-0 left-0 z-30 max-h-56 overflow-y-auto rounded-md border border-white/10 bg-[oklch(0.17_0.016_258/0.97)] py-1 shadow-[0_18px_40px_-24px_rgba(0,0,0,0.9)] backdrop-blur-md"
             >
               {loadingPlaces && suggestions.length === 0 && (
-                <li className="px-3 py-2 text-[12px] text-muted-foreground">Searching California…</li>
+                <li className="px-3 py-2 text-[13px] text-muted-foreground">Searching California…</li>
               )}
               {suggestions.map((place, index) => {
                 const active = index === activeIndex;
@@ -254,8 +254,8 @@ export function SearchPanel({
                       onMouseEnter={() => setActiveIndex(index)}
                       onClick={() => chooseSuggestion(place)}
                     >
-                      <span className="text-[13px] text-foreground">{place.label}</span>
-                      <span className="text-[11px] text-muted-foreground">{place.detail}</span>
+                      <span className="text-[14px] text-foreground">{place.label}</span>
+                      <span className="text-[12px] text-muted-foreground">{place.detail}</span>
                     </button>
                   </li>
                 );
@@ -263,13 +263,13 @@ export function SearchPanel({
             </ul>
           )}
         </div>
-        <p className="text-[11px] leading-snug text-muted-foreground/80">
+        <p className="text-[12px] leading-snug text-muted-foreground/80">
           {areaLocked
-            ? "Search area is fixed to the active investigation. Change date/time or start a new search area."
+            ? "Change date, time, window, or radius, then Update Search to search this area again. Use Change Search Area to pick a different location."
             : "Search California places or click the map to set a location."}
         </p>
         {showValidation && missingLocation && (
-          <p className="text-[11px] text-amber-200/80">Choose a California location.</p>
+          <p className="text-[12px] text-amber-200/80">Choose a California location.</p>
         )}
       </div>
 
@@ -292,10 +292,10 @@ export function SearchPanel({
             disabled={searching}
           />
           {showValidation && missingDate && (
-            <p className="text-[11px] text-amber-200/80">Date required.</p>
+            <p className="text-[12px] text-amber-200/80">Date required.</p>
           )}
           {showValidation && !missingDate && dateOutOfRange && (
-            <p className="text-[11px] text-amber-200/80">
+            <p className="text-[12px] text-amber-200/80">
               Choose a date from {dateBounds.min} to {dateBounds.max} UTC.
             </p>
           )}
@@ -316,7 +316,7 @@ export function SearchPanel({
             disabled={searching}
           />
           {showValidation && missingTime && (
-            <p className="text-[11px] text-amber-200/80">Time required.</p>
+            <p className="text-[12px] text-amber-200/80">Time required.</p>
           )}
         </div>
       </div>
@@ -340,7 +340,7 @@ export function SearchPanel({
                 aria-checked={selected}
                 onClick={() => onWindowChange(option.minutes)}
                 className={cn(
-                  "h-8 rounded-[5px] text-[12px] transition-colors duration-150",
+                  "h-8 rounded-[5px] text-[13px] transition-colors duration-150",
                   selected
                     ? "bg-primary/15 text-primary shadow-[inset_0_0_0_1px_oklch(0.72_0.17_50/0.4)]"
                     : "text-muted-foreground hover:bg-white/4 hover:text-foreground",
@@ -351,12 +351,12 @@ export function SearchPanel({
             );
           })}
         </div>
-        <p className="text-[11px] leading-snug text-muted-foreground/80">
+        <p className="text-[12px] leading-snug text-muted-foreground/80">
           Centered on the selected UTC time.
         </p>
       </fieldset>
 
-      <fieldset className="flex flex-col gap-1.5" disabled={locationControlsDisabled}>
+      <fieldset className="flex flex-col gap-1.5" disabled={searching}>
         <legend className="text-[10px] font-medium tracking-[0.16em] text-muted-foreground uppercase">
           Radius
         </legend>
@@ -375,7 +375,7 @@ export function SearchPanel({
                 aria-checked={selected}
                 onClick={() => onRadiusChange(option.km)}
                 className={cn(
-                  "h-8 rounded-[5px] text-[12px] transition-colors duration-150",
+                  "h-8 rounded-[5px] text-[13px] transition-colors duration-150",
                   selected
                     ? "bg-primary/15 text-primary shadow-[inset_0_0_0_1px_oklch(0.72_0.17_50/0.4)]"
                     : "text-muted-foreground hover:bg-white/4 hover:text-foreground",
@@ -404,7 +404,13 @@ export function SearchPanel({
           disabled={searching}
           aria-busy={searching}
           aria-describedby={`${baseId}-status`}
-          title={ready ? "Search GOES-18 GLM flashes" : "Complete the search setup first"}
+          title={
+            ready
+              ? areaLocked
+                ? "Update search with current date, time, window, and radius for this area"
+                : "Search GOES-18 GLM flashes"
+              : "Complete the search setup first"
+          }
         >
           {searching ? (
             <span className="inline-flex items-center gap-2">
@@ -412,7 +418,7 @@ export function SearchPanel({
               Searching…
             </span>
           ) : areaLocked ? (
-            "Search Again"
+            "Update Search"
           ) : (
             "Find Lightning"
           )}
@@ -425,14 +431,14 @@ export function SearchPanel({
             className="w-full"
             disabled={searching}
             onClick={onChangeSearchArea}
-            title="Clear results and choose a different search location or radius"
+            title="Unlock geographic selection to choose a different search location or radius"
           >
             Change Search Area
           </Button>
         ) : null}
         <p
           id={`${baseId}-status`}
-          className="flex items-center justify-center gap-1.5 text-center text-[11px] text-muted-foreground"
+          className="flex items-center justify-center gap-1.5 text-center text-[12px] text-muted-foreground"
         >
           <span
             className={cn(
@@ -470,7 +476,7 @@ function SearchSetupSummary({
       <p className="text-[10px] font-medium tracking-[0.16em] text-muted-foreground uppercase">
         Search setup
       </p>
-      <dl className="mt-2 space-y-1.5 text-[12px]">
+      <dl className="mt-2 space-y-1.5 text-[13px]">
         <div className="flex items-start justify-between gap-3">
           <dt className="text-muted-foreground">Location</dt>
           <dd className="max-w-[12rem] truncate text-right text-foreground/90">

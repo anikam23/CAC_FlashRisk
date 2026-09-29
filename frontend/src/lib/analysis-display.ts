@@ -13,40 +13,74 @@ export type FeatureDisplayMeta = {
   label: string;
   unit?: string;
   section: FeatureSectionId;
+  /** Short plain-language cue — descriptive only, no thresholds. */
+  hint?: string;
   /** Display precision / style — values themselves are never altered. */
-  format: "temp" | "pct" | "kpa" | "mm" | "mspeed" | "moisture" | "index" | "season" | "energy" | "area" | "duration" | "count" | "raw";
+  format:
+    | "temp"
+    | "pct"
+    | "kpa"
+    | "mm"
+    | "mspeed"
+    | "moisture"
+    | "index"
+    | "season"
+    | "energy"
+    | "area"
+    | "duration"
+    | "count"
+    | "raw";
 };
 
-export const FEATURE_SECTIONS: { id: FeatureSectionId; title: string; blurb: string }[] = [
+export const FEATURE_SECTIONS: {
+  id: FeatureSectionId;
+  title: string;
+  blurb: string;
+  emoji: string;
+  /** Primary environmental summary vs secondary/collapsible detail. */
+  prominence: "primary" | "secondary";
+}[] = [
   {
     id: "atmosphere",
     title: "Atmosphere",
-    blurb: "Near-surface weather at the flash time and location",
+    blurb: "Near-surface weather from ERA5-Land at the flash time and location",
+    emoji: "🌡️",
+    prominence: "primary",
   },
   {
     id: "precipitation",
     title: "Precipitation",
-    blurb: "Accumulated rainfall over recent windows",
+    blurb: "Recent precipitation totals from ERA5-Land around the flash",
+    emoji: "🌧️",
+    prominence: "primary",
   },
   {
     id: "soil",
     title: "Soil moisture",
-    blurb: "NASA SMAP volumetric water content",
+    blurb: "Surface and root-zone water content from SMAP",
+    emoji: "💧",
+    prominence: "primary",
   },
   {
     id: "vegetation",
     title: "Vegetation",
-    blurb: "MODIS greenness and water indices",
+    blurb: "Greenness and vegetation water signals from MODIS",
+    emoji: "🌿",
+    prominence: "primary",
+  },
+  {
+    id: "lightning",
+    title: "Lightning Characteristics",
+    blurb: "GOES-18 GLM characteristics of the selected flash",
+    emoji: "⚡",
+    prominence: "secondary",
   },
   {
     id: "seasonality",
     title: "Seasonality",
-    blurb: "Annual cycle encoding from flash timestamp",
-  },
-  {
-    id: "lightning",
-    title: "Lightning characteristics",
-    blurb: "GOES-18 GLM properties of the selected flash",
+    blurb: "Time of year encoded as a continuous annual cycle for the model",
+    emoji: "🗓️",
+    prominence: "secondary",
   },
 ];
 
@@ -54,9 +88,10 @@ export const FEATURE_SECTIONS: { id: FeatureSectionId; title: string; blurb: str
 export const FEATURE_DISPLAY: Record<string, FeatureDisplayMeta> = {
   era5_temperature_2m_c: {
     name: "era5_temperature_2m_c",
-    label: "Air temperature (2 m)",
+    label: "Air temperature",
     unit: "°C",
     section: "atmosphere",
+    hint: "2 m air temperature",
     format: "temp",
   },
   era5_relative_humidity_pct: {
@@ -64,6 +99,7 @@ export const FEATURE_DISPLAY: Record<string, FeatureDisplayMeta> = {
     label: "Relative humidity",
     unit: "%",
     section: "atmosphere",
+    hint: "Near-surface moisture in the air",
     format: "pct",
   },
   era5_vpd_kpa: {
@@ -71,79 +107,87 @@ export const FEATURE_DISPLAY: Record<string, FeatureDisplayMeta> = {
     label: "Vapor pressure deficit",
     unit: "kPa",
     section: "atmosphere",
+    hint: "Atmospheric dryness",
     format: "kpa",
   },
   era5_wind_speed_10m_ms: {
     name: "era5_wind_speed_10m_ms",
-    label: "Wind speed (10 m)",
+    label: "Wind speed",
     unit: "m/s",
     section: "atmosphere",
+    hint: "10 m wind speed",
     format: "mspeed",
   },
   era5_precip_24h_mm: {
     name: "era5_precip_24h_mm",
-    label: "Precipitation (24 h)",
+    label: "Last 24 h",
     unit: "mm",
     section: "precipitation",
     format: "mm",
   },
   era5_precip_72h_mm: {
     name: "era5_precip_72h_mm",
-    label: "Precipitation (72 h)",
+    label: "Last 72 h",
     unit: "mm",
     section: "precipitation",
     format: "mm",
   },
   era5_precip_168h_mm: {
     name: "era5_precip_168h_mm",
-    label: "Precipitation (7 d)",
+    label: "Last 7 d",
     unit: "mm",
     section: "precipitation",
     format: "mm",
   },
   era5_precip_30d_mm: {
     name: "era5_precip_30d_mm",
-    label: "Precipitation (30 d)",
+    label: "Last 30 d",
     unit: "mm",
     section: "precipitation",
     format: "mm",
   },
   smap_surface_soil_moisture: {
     name: "smap_surface_soil_moisture",
-    label: "Surface soil moisture",
+    label: "Surface",
     unit: "m³/m³",
     section: "soil",
+    hint: "Near-surface soil water",
     format: "moisture",
   },
   smap_rootzone_soil_moisture: {
     name: "smap_rootzone_soil_moisture",
-    label: "Root-zone soil moisture",
+    label: "Root zone",
     unit: "m³/m³",
     section: "soil",
+    hint: "Deeper root-zone soil water",
     format: "moisture",
   },
   modis_ndwi: {
     name: "modis_ndwi",
     label: "NDWI",
     section: "vegetation",
+    hint: "Vegetation moisture signal",
     format: "index",
   },
   modis_ndvi: {
     name: "modis_ndvi",
     label: "NDVI",
     section: "vegetation",
+    hint: "Vegetation greenness",
     format: "index",
   },
   season_sin: {
     name: "season_sin",
     label: "Season sine",
     section: "seasonality",
+    hint: "Technical annual-cycle coordinate",
     format: "season",
   },
   season_cos: {
     name: "season_cos",
     label: "Season cosine",
     section: "seasonality",
+    hint: "Technical annual-cycle coordinate",
     format: "season",
   },
   flash_energy: {
@@ -189,7 +233,7 @@ export const FEATURE_DISPLAY: Record<string, FeatureDisplayMeta> = {
   },
   max_events_per_group: {
     name: "max_events_per_group",
-    label: "Max events per group",
+    label: "Max events / group",
     section: "lightning",
     format: "count",
   },
@@ -292,6 +336,7 @@ export type SectionFeatureRow = {
   value: number;
   displayText: string;
   unit?: string;
+  hint?: string;
 };
 
 export function featuresBySection(
@@ -310,6 +355,7 @@ export function featuresBySection(
       value: featureValues[name],
       displayText: formatted.text,
       unit: formatted.unit,
+      hint: meta?.hint,
     };
     const list = bySection.get(sectionId) ?? [];
     list.push(row);
@@ -320,6 +366,24 @@ export function featuresBySection(
     section,
     rows: bySection.get(section.id) ?? [],
   })).filter((entry) => entry.rows.length > 0);
+}
+
+export function primaryEnvironmentSections(
+  featureNames: string[],
+  featureValues: Record<string, number>,
+) {
+  return featuresBySection(featureNames, featureValues).filter(
+    (entry) => entry.section.prominence === "primary",
+  );
+}
+
+export function secondaryFeatureSections(
+  featureNames: string[],
+  featureValues: Record<string, number>,
+) {
+  return featuresBySection(featureNames, featureValues).filter(
+    (entry) => entry.section.prominence === "secondary",
+  );
 }
 
 export function formatAnalysisRuntime(seconds: number): string {
