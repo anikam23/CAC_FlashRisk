@@ -9,6 +9,7 @@ import {
 import { CaliforniaMap } from "@/components/map/california-map";
 import { SearchPanel } from "@/components/search/search-panel";
 import { TopBar } from "@/components/shell/top-bar";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   ApiError,
   analyzeFlash,
@@ -29,6 +30,7 @@ import {
   buildLightningSearchRequest,
   createEmptySearchSetup,
   toUtcIsoDatetime,
+  type ActiveInvestigation,
   type LightningSearchSetup,
   type SearchRadiusKm,
   type SearchWindowMinutes,
@@ -36,6 +38,15 @@ import {
 } from "@/lib/search";
 
 type ReconstructionState = "idle" | "loading" | "ready" | "error";
+
+type PendingGuard =
+  | { kind: "switch-flash"; flash: GlmFlash }
+  | { kind: "find-lightning" }
+  | { kind: "change-search-area" }
+  | null;
+
+const ANALYSIS_CLOSE_WARNING =
+  "Your current analysis will be closed. Returning to this flash later may require running the analysis again.";
 
 export default function Home() {
   const [setup, setSetup] = useState<LightningSearchSetup>(createEmptySearchSetup);
@@ -55,6 +66,11 @@ export default function Home() {
   const [analysisState, setAnalysisState] = useState<AnalysisState>("idle");
   const [analysisResult, setAnalysisResult] = useState<AnalyzeFlashResponse | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+  /** Location/radius that produced the currently displayed flashes (if any). */
+  const [activeInvestigation, setActiveInvestigation] = useState<ActiveInvestigation | null>(
+    null,
+  );
+  const [pendingGuard, setPendingGuard] = useState<PendingGuard>(null);
 
   const searchAbortRef = useRef<AbortController | null>(null);
   const reconstructionAbortRef = useRef<AbortController | null>(null);
@@ -62,9 +78,14 @@ export default function Home() {
   const selectedFlashIdRef = useRef<string | null>(null);
   const flashesRef = useRef(flashes);
   const reconstructionFocusRef = useRef(false);
+  const analysisReadyRef = useRef(false);
 
   const selectedFlash =
     flashes.find((flash) => flash.global_flash_id === selectedFlashId) ?? null;
+  const investigationActive = activeInvestigation !== null;
+  const mapLocation = activeInvestigation?.location ?? setup.location;
+  const mapRadiusKm = activeInvestigation?.radiusKm ?? setup.radiusKm;
+  const analysisReady = analysisState === "ready";
 
   useEffect(() => {
     selectedFlashIdRef.current = selectedFlashId;
@@ -77,6 +98,10 @@ export default function Home() {
   useEffect(() => {
     reconstructionFocusRef.current = reconstructionFocus;
   }, [reconstructionFocus]);
+
+  useEffect(() => {
+    analysisReadyRef.current = analysisReady;
+  }, [analysisReady]);
 
   // Fetch reconstruction for the current selection. Reset/loading state is set by
   // selection handlers so this effect does not synchronously cascade setState.
@@ -168,8 +193,7 @@ export default function Home() {
     setReconstructionFocus(false);
   };
 
-  const selectFlash = (flash: GlmFlash) => {
-    if (flash.global_flash_id === selectedFlashIdRef.current) return;
+  const applyFlashSelection = (flash: GlmFlash) => {
     reconstructionAbortRef.current?.abort();
     clearAnalysis();
     setPlaying(false);
@@ -179,6 +203,15 @@ export default function Home() {
     setReconstructionError(null);
     setReconstructionFocus(false);
     setSelectedFlashId(flash.global_flash_id);
+  };
+
+  const selectFlash = (flash: GlmFlash) => {
+    if (flash.global_flash_id === selectedFlashIdRef.current) return;
+    if (analysisReadyRef.current) {
+      setPendingGuard({ kind: "switch-flash", flash });
+      return;
+    }
+    applyFlashSelection(flash);
   };
 
   const handleAnalyze = () => {
@@ -234,6 +267,7 @@ export default function Home() {
   };
 
   const applyLocation = (location: SelectedSearchLocation, options?: { focus?: boolean }) => {
+    if (activeInvestigation) return;
     setSetup((current) => ({ ...current, location }));
     setLocationText(location.label);
     if (options?.focus) setFocusNonce((value) => value + 1);
@@ -248,6 +282,7 @@ export default function Home() {
   };
 
   const handlePlaceSelect = (place: PlaceSuggestion) => {
+    if (activeInvestigation) return;
     if (!isInsideCalifornia(place.lng, place.lat)) return;
     applyLocation(
       {
@@ -261,6 +296,7 @@ export default function Home() {
   };
 
   const handleLocationTextChange = (value: string) => {
+    if (activeInvestigation) return;
     setLocationText(value);
 
     const parsed = parseCoordinateInput(value);
@@ -285,7 +321,7 @@ export default function Home() {
     });
   };
 
-  const handleFindLightning = async () => {
+  const runLightningSearch = async () => {
     const request = buildLightningSearchRequest(setup);
     if (!request || searching) return;
 
@@ -313,6 +349,14 @@ export default function Home() {
 
       if (controller.signal.aborted) return;
 
+      // Commit the geometry that produced these results (even if count is 0).
+      if (setup.location) {
+        setActiveInvestigation({
+          location: setup.location,
+          radiusKm: request.radiusKm,
+        });
+      }
+
       setFlashes(result.flashes);
       if (result.count === 0) {
         setStatusMessage("No lightning flashes found in this area and time window.");
@@ -327,6 +371,10 @@ export default function Home() {
       if (controller.signal.aborted) return;
       setFlashes([]);
       clearSelection();
+      // Keep any prior investigation only if this was a re-search failure?
+      // Failed search should not invent results; clear investigation so map
+      // configuration is available again for retry.
+      setActiveInvestigation(null);
       if (error instanceof ApiError) {
         setStatusMessage(error.message);
       } else if (error instanceof Error) {
@@ -339,13 +387,80 @@ export default function Home() {
     }
   };
 
+  const handleFindLightning = () => {
+    if (searching) return;
+    if (analysisReady) {
+      setPendingGuard({ kind: "find-lightning" });
+      return;
+    }
+    void runLightningSearch();
+  };
+
+  const beginChangeSearchArea = () => {
+    searchAbortRef.current?.abort();
+    clearSelection();
+    setFlashes([]);
+    setActiveInvestigation(null);
+    setStatusMessage("Choose a new search location and radius, then find lightning.");
+  };
+
+  const handleChangeSearchArea = () => {
+    if (searching) return;
+    if (analysisReady) {
+      setPendingGuard({ kind: "change-search-area" });
+      return;
+    }
+    beginChangeSearchArea();
+  };
+
+  const dismissGuard = () => setPendingGuard(null);
+
+  const confirmGuard = () => {
+    const pending = pendingGuard;
+    setPendingGuard(null);
+    if (!pending) return;
+
+    if (pending.kind === "switch-flash") {
+      applyFlashSelection(pending.flash);
+      return;
+    }
+    if (pending.kind === "find-lightning") {
+      void runLightningSearch();
+      return;
+    }
+    if (pending.kind === "change-search-area") {
+      beginChangeSearchArea();
+    }
+  };
+
+  const guardTitle =
+    pendingGuard?.kind === "switch-flash"
+      ? "Switch selected flash?"
+      : pendingGuard?.kind === "find-lightning"
+        ? "Start a new lightning search?"
+        : pendingGuard?.kind === "change-search-area"
+          ? "Change search area?"
+          : "";
+
+  const guardConfirmLabel =
+    pendingGuard?.kind === "switch-flash"
+      ? "Switch Flash"
+      : pendingGuard?.kind === "find-lightning"
+        ? "Start New Search"
+        : pendingGuard?.kind === "change-search-area"
+          ? "Change Search Area"
+          : "Continue";
+
+  const guardCancelLabel =
+    pendingGuard?.kind === "switch-flash" ? "Keep Current Analysis" : "Keep Current Analysis";
+
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-background">
       <TopBar />
       <main className="relative min-h-0 flex-1">
         <CaliforniaMap
-          selectedLocation={setup.location}
-          searchRadiusKm={setup.radiusKm}
+          selectedLocation={mapLocation}
+          searchRadiusKm={mapRadiusKm}
           flashes={flashes}
           selectedFlashId={selectedFlashId}
           reconstruction={reconstruction}
@@ -353,6 +468,7 @@ export default function Home() {
           reconstructionFocus={reconstructionFocus}
           reconstructionCameraNonce={reconstructionCameraNonce}
           focusNonce={focusNonce}
+          allowMapLocationPick={!investigationActive}
           onSelectLocation={handleMapSelect}
           onSelectFlash={selectFlash}
           onDeselectFlash={clearSelection}
@@ -364,6 +480,7 @@ export default function Home() {
             locationText={locationText}
             searching={searching}
             statusMessage={statusMessage}
+            investigationActive={investigationActive}
             onLocationTextChange={handleLocationTextChange}
             onSelectPlace={handlePlaceSelect}
             onDateChange={(date) => setSetup((current) => ({ ...current, date }))}
@@ -371,12 +488,12 @@ export default function Home() {
             onWindowChange={(windowMinutes: SearchWindowMinutes) =>
               setSetup((current) => ({ ...current, windowMinutes }))
             }
-            onRadiusChange={(radiusKm: SearchRadiusKm) =>
-              setSetup((current) => ({ ...current, radiusKm }))
-            }
-            onFindLightning={() => {
-              void handleFindLightning();
+            onRadiusChange={(radiusKm: SearchRadiusKm) => {
+              if (activeInvestigation) return;
+              setSetup((current) => ({ ...current, radiusKm }));
             }}
+            onFindLightning={handleFindLightning}
+            onChangeSearchArea={handleChangeSearchArea}
           />
           <FlashAnalysisPanel
             className="pointer-events-auto absolute right-4 bottom-4 left-4 max-h-[calc(100%-8.75rem)] overflow-y-auto xl:top-4 xl:right-4 xl:bottom-auto xl:left-auto xl:max-h-[calc(100%-2rem)] xl:w-[min(22.5rem,calc(100%-2rem))] 2xl:w-[23.5rem]"
@@ -402,6 +519,15 @@ export default function Home() {
             }}
           />
         </div>
+        <ConfirmDialog
+          open={pendingGuard !== null}
+          title={guardTitle}
+          description={ANALYSIS_CLOSE_WARNING}
+          cancelLabel={guardCancelLabel}
+          confirmLabel={guardConfirmLabel}
+          onCancel={dismissGuard}
+          onConfirm={confirmGuard}
+        />
       </main>
     </div>
   );

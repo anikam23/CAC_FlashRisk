@@ -884,6 +884,11 @@ type CaliforniaMapProps = {
   /** Incremented when Play should fit the map to the reconstruction extent. */
   reconstructionCameraNonce: number;
   focusNonce: number;
+  /**
+   * When false, empty-map clicks neither pick a search location nor clear the
+   * selected flash (active investigation / locked search area).
+   */
+  allowMapLocationPick?: boolean;
   onSelectLocation: (location: LonLat) => void;
   onSelectFlash: (flash: GlmFlash) => void;
   onDeselectFlash: () => void;
@@ -899,6 +904,7 @@ export function CaliforniaMap({
   reconstructionFocus,
   reconstructionCameraNonce,
   focusNonce,
+  allowMapLocationPick = true,
   onSelectLocation,
   onSelectFlash,
   onDeselectFlash,
@@ -911,6 +917,7 @@ export function CaliforniaMap({
   const onSelectRef = useRef(onSelectLocation);
   const onSelectFlashRef = useRef(onSelectFlash);
   const onDeselectFlashRef = useRef(onDeselectFlash);
+  const allowMapLocationPickRef = useRef(allowMapLocationPick);
   const lastFocusNonceRef = useRef(0);
   const lastReconstructionCameraNonceRef = useRef(0);
   const savedViewRef = useRef<SavedMapView | null>(null);
@@ -927,6 +934,14 @@ export function CaliforniaMap({
   useEffect(() => {
     onDeselectFlashRef.current = onDeselectFlash;
   }, [onDeselectFlash]);
+
+  useEffect(() => {
+    allowMapLocationPickRef.current = allowMapLocationPick;
+    const map = mapRef.current;
+    if (map && !allowMapLocationPick) {
+      map.getCanvas().style.cursor = "";
+    }
+  }, [allowMapLocationPick]);
 
   useEffect(() => {
     flashesRef.current = flashes;
@@ -972,6 +987,12 @@ export function CaliforniaMap({
         return;
       }
 
+      // While an investigation is active, empty-map clicks must not move the
+      // search area or clear selection / analysis.
+      if (!allowMapLocationPickRef.current) {
+        return;
+      }
+
       // Empty map space clears flash selection; location pick still applies inside CA.
       onDeselectFlashRef.current();
 
@@ -981,6 +1002,10 @@ export function CaliforniaMap({
     };
 
     const onMouseMove = (event: maplibregl.MapMouseEvent) => {
+      if (!allowMapLocationPickRef.current) {
+        map.getCanvas().style.cursor = "";
+        return;
+      }
       const { lng, lat } = event.lngLat;
       map.getCanvas().style.cursor = isInsideCalifornia(lng, lat) ? "crosshair" : "";
     };

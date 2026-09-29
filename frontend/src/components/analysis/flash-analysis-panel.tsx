@@ -3,13 +3,9 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { CircleHelp, LoaderCircle, Pause, Play, RotateCcw, X, Zap } from "lucide-react";
 
+import { AnalysisReport } from "@/components/analysis/analysis-report";
 import { Button } from "@/components/ui/button";
 import type { AnalyzeFlashResponse, GlmFlash, GlmFlashReconstruction } from "@/lib/api";
-import {
-  analysisFeatureRows,
-  formatFeatureValue,
-  formatModelScore,
-} from "@/lib/analysis-display";
 import { GLM_PLAYBACK_SLOWDOWN } from "@/lib/flash-playback";
 import { formatObservedSpanKm, observedEventSpanKm } from "@/lib/geo-distance";
 import { cn } from "cn";
@@ -259,6 +255,7 @@ function SelectedFlashBody({
       </Button>
 
       <AnalysisStatus
+        flash={flash}
         state={analysisState}
         result={analysisResult}
         error={analysisError}
@@ -268,10 +265,12 @@ function SelectedFlashBody({
 }
 
 function AnalysisStatus({
+  flash,
   state,
   result,
   error,
 }: {
+  flash: GlmFlash;
   state: AnalysisState;
   result: AnalyzeFlashResponse | null;
   error: string | null;
@@ -306,34 +305,7 @@ function AnalysisStatus({
 
   if (!result) return null;
 
-  const rows = analysisFeatureRows(result.feature_names, result.feature_values);
-
-  return (
-    <section aria-label="Analysis results">
-      <SectionLabel>Analysis results</SectionLabel>
-      <p className="mt-2.5 text-[11px] leading-snug text-muted-foreground">
-        Temporary view — model score and frozen 21-feature inputs (no risk labels).
-      </p>
-      <dl className="mt-3 space-y-2 text-[12.5px]">
-        <MetaRow label="Model score" value={formatModelScore(result.model_score)} />
-        <MetaRow label="Runtime" value={`${result.analysis_seconds.toFixed(1)} s`} />
-      </dl>
-      <div className="mt-3.5">
-        <p className="text-[10px] font-medium tracking-[0.14em] text-muted-foreground uppercase">
-          Features ({rows.length})
-        </p>
-        <dl className="mt-2 max-h-56 space-y-1.5 overflow-y-auto pr-1 text-[11.5px]">
-          {rows.map((row) => (
-            <MetaRow
-              key={row.name}
-              label={row.name}
-              value={formatFeatureValue(row.value)}
-            />
-          ))}
-        </dl>
-      </div>
-    </section>
-  );
+  return <AnalysisReport result={result} flash={flash} />;
 }
 
 function ReconstructionControls({

@@ -15,7 +15,7 @@ FlashRisk currently provides a working California map interface, real GOES-18 GL
 - **Selected-flash GLM event reconstruction** using actual event coordinates and timing (playback slowed for usability)
 - **Observed event extent** (spatial outline of accumulated event coordinates) and **observed span** (maximum great-circle distance between event locations)—visualization aids only, not fire perimeters or predicted burn areas
 - **Search-radius and map-distance context** (radius label and metric scale bar)
-- **Analyze selected flash** — runs the validated 21-feature pipeline and returns a temporary model score + feature values view (no risk-label thresholds yet)
+- **Analyze selected flash** — runs the validated 21-feature pipeline and shows a FlashRisk Analysis Report (0–100 presentation score, grouped inputs; no risk-label thresholds yet)
 - **Backend golden/parity tests** for the validated GLM reference flash
 
 ## How it works
@@ -24,7 +24,7 @@ FlashRisk currently provides a working California map interface, real GOES-18 GL
 2. Retrieve real GOES-18 GLM flashes for that query.
 3. Select a flash on the map.
 4. Inspect GLM characteristics and play back the flash’s observed events.
-5. Click Analyze to retrieve environmental features, assemble the frozen 21-feature vector, and score with the frozen XGBoost model. The temporary results panel shows the raw model score and feature values.
+5. Click Analyze to retrieve environmental features, assemble the frozen 21-feature vector, and score with the frozen XGBoost model. The right-side FlashRisk Analysis Report shows a 0–100 presentation score and organized model inputs.
 
 ## Current status
 
@@ -41,8 +41,8 @@ FlashRisk currently provides a working California map interface, real GOES-18 GL
 | Seasonality (`season_sin` / `season_cos`) | Implemented (used by Analyze) |
 | Exact 21-feature construction | Implemented (used by Analyze) |
 | Frozen XGBoost inference | Implemented (used by Analyze) |
-| Analyze API + temporary results UI | Implemented (score + 21 features; no risk labels yet) |
-| Model interpretation / result presentation | Under development |
+| Analyze API + FlashRisk Analysis Report | Implemented (0–100 presentation score + grouped inputs; no risk labels yet) |
+| Model interpretation / result presentation | Under development (report UI in place; risk thresholds not assigned) |
 | Sentinel-2 reconnaissance imagery | Under development |
 | Multi-flash surveillance report | Under development |
 

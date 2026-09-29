@@ -32,6 +32,15 @@ export type LightningSearchSetup = {
   radiusKm: SearchRadiusKm;
 };
 
+/**
+ * Location/radius that produced the currently displayed search results.
+ * Distinct from `LightningSearchSetup`, which configures a future search.
+ */
+export type ActiveInvestigation = {
+  location: SelectedSearchLocation;
+  radiusKm: SearchRadiusKm;
+};
+
 export type LightningSearchRequest = {
   longitude: number;
   latitude: number;

@@ -59,6 +59,8 @@ type SearchPanelProps = {
   locationText: string;
   searching?: boolean;
   statusMessage?: string;
+  /** True when displayed flashes come from a committed search area. */
+  investigationActive?: boolean;
   onLocationTextChange: (value: string) => void;
   onSelectPlace: (place: PlaceSuggestion) => void;
   onDateChange: (value: string) => void;
@@ -66,6 +68,7 @@ type SearchPanelProps = {
   onWindowChange: (value: SearchWindowMinutes) => void;
   onRadiusChange: (value: SearchRadiusKm) => void;
   onFindLightning: () => void;
+  onChangeSearchArea?: () => void;
 };
 
 export function SearchPanel({
@@ -74,6 +77,7 @@ export function SearchPanel({
   locationText,
   searching = false,
   statusMessage = "Ready to search",
+  investigationActive = false,
   onLocationTextChange,
   onSelectPlace,
   onDateChange,
@@ -81,6 +85,7 @@ export function SearchPanel({
   onWindowChange,
   onRadiusChange,
   onFindLightning,
+  onChangeSearchArea,
 }: SearchPanelProps) {
   const baseId = useId();
   const listId = `${baseId}-suggestions`;
@@ -91,6 +96,8 @@ export function SearchPanel({
   const [loadingPlaces, setLoadingPlaces] = useState(false);
   const [attemptedSubmit, setAttemptedSubmit] = useState(false);
 
+  const areaLocked = investigationActive;
+  const locationControlsDisabled = searching || areaLocked;
   const dateBounds = useMemo(() => glmSearchDateBounds(), []);
 
   const query = locationText.trim();
@@ -209,7 +216,9 @@ export function SearchPanel({
                 setOpen(false);
               }
             }}
-            placeholder="City, place, or map click"
+            placeholder={
+              areaLocked ? "Search area locked — Change Search Area to edit" : "City, place, or map click"
+            }
             className={cn(
               fieldClass,
               "pr-2.5 pl-8",
@@ -221,7 +230,7 @@ export function SearchPanel({
             aria-controls={listId}
             aria-autocomplete="list"
             aria-invalid={showValidation && missingLocation}
-            disabled={searching}
+            disabled={locationControlsDisabled}
           />
           {showSuggestions && (suggestions.length > 0 || loadingPlaces) && (
             <ul
@@ -255,7 +264,9 @@ export function SearchPanel({
           )}
         </div>
         <p className="text-[11px] leading-snug text-muted-foreground/80">
-          Search California places or click the map to set a location.
+          {areaLocked
+            ? "Search area is fixed to the active investigation. Change date/time or start a new search area."
+            : "Search California places or click the map to set a location."}
         </p>
         {showValidation && missingLocation && (
           <p className="text-[11px] text-amber-200/80">Choose a California location.</p>
@@ -345,7 +356,7 @@ export function SearchPanel({
         </p>
       </fieldset>
 
-      <fieldset className="flex flex-col gap-1.5" disabled={searching}>
+      <fieldset className="flex flex-col gap-1.5" disabled={locationControlsDisabled}>
         <legend className="text-[10px] font-medium tracking-[0.16em] text-muted-foreground uppercase">
           Radius
         </legend>
@@ -400,10 +411,25 @@ export function SearchPanel({
               <LoaderCircle className="size-3.5 animate-spin" aria-hidden />
               Searching…
             </span>
+          ) : areaLocked ? (
+            "Search Again"
           ) : (
             "Find Lightning"
           )}
         </Button>
+        {areaLocked && onChangeSearchArea ? (
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="w-full"
+            disabled={searching}
+            onClick={onChangeSearchArea}
+            title="Clear results and choose a different search location or radius"
+          >
+            Change Search Area
+          </Button>
+        ) : null}
         <p
           id={`${baseId}-status`}
           className="flex items-center justify-center gap-1.5 text-center text-[11px] text-muted-foreground"

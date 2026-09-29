@@ -37,7 +37,7 @@ ERA5-Land, SMAP, MODIS, and Notebook-12 seasonality (`season_sin` / `season_cos`
 
 ## Analysis flow
 
-`POST /api/analyze` accepts a selected flash identity (`source_file`, `flash_id`), runs the validated synchronous pipeline (`analyze_selected_flash`), and returns the flash identity, raw model score, and all 21 frozen feature names/values. The frontend Analyze button shows loading / results / error states in the right-side panel. Result presentation is temporary (no Low/Moderate/High labels or surveillance visualization yet). Satellite imagery remains planned for context only and is not a model input.
+`POST /api/analyze` accepts a selected flash identity (`source_file`, `flash_id`), runs the validated synchronous pipeline (`analyze_selected_flash`), and returns the flash identity, raw model score, and all 21 frozen feature names/values. The frontend Analyze button shows loading / results / error states in the right-side panel. The FlashRisk Analysis Report presents a 0–100 FlashRisk Score (raw score × 100 for display only), a visual score scale without qualitative categories, grouped human-readable inputs, and an expandable full 21-feature vector. Satellite imagery remains planned for context only and is not a model input.
 
 ## Model bundle (`model/flashrisk-v1/`)
 
