@@ -69,6 +69,10 @@ type SearchPanelProps = {
   onRadiusChange: (value: SearchRadiusKm) => void;
   onFindLightning: () => void;
   onChangeSearchArea?: () => void;
+  /** Returned flashes available for multi-select. Zero hides the entry action. */
+  flashCount?: number;
+  multiSelectMode?: boolean;
+  onEnterMultiSelect?: () => void;
 };
 
 export function SearchPanel({
@@ -86,6 +90,9 @@ export function SearchPanel({
   onRadiusChange,
   onFindLightning,
   onChangeSearchArea,
+  flashCount = 0,
+  multiSelectMode = false,
+  onEnterMultiSelect,
 }: SearchPanelProps) {
   const baseId = useId();
   const listId = `${baseId}-suggestions`;
@@ -434,6 +441,18 @@ export function SearchPanel({
             title="Unlock geographic selection to choose a different search location or radius"
           >
             Change Search Area
+          </Button>
+        ) : null}
+        {flashCount > 0 && !multiSelectMode && onEnterMultiSelect ? (
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="w-full"
+            disabled={searching}
+            onClick={onEnterMultiSelect}
+          >
+            Select Multiple Flashes
           </Button>
         ) : null}
         <p

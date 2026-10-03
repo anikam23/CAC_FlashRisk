@@ -4,6 +4,8 @@ import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { CircleHelp, LoaderCircle, Pause, Play, RotateCcw, X, Zap } from "lucide-react";
 
 import { AnalysisReport } from "@/components/analysis/analysis-report";
+import { SaveReportButton } from "@/components/analysis/save-report-button";
+import { SurveillanceView } from "@/components/analysis/surveillance-view";
 import { Button } from "@/components/ui/button";
 import type { AnalyzeFlashResponse, GlmFlash, GlmFlashReconstruction } from "@/lib/api";
 import { GLM_PLAYBACK_SLOWDOWN } from "@/lib/flash-playback";
@@ -67,6 +69,7 @@ type FlashAnalysisPanelProps = {
   onReplay?: () => void;
   onReset?: () => void;
   onSeekGlmMs?: (ms: number) => void;
+  onReturnToReport?: () => void;
 };
 
 export function FlashAnalysisPanel({
@@ -88,6 +91,7 @@ export function FlashAnalysisPanel({
   onReplay,
   onReset,
   onSeekGlmMs,
+  onReturnToReport,
 }: FlashAnalysisPanelProps) {
   const analysisReady = analysisState === "ready" && analysisResult !== null;
   const animationEnd = reconstruction?.animation_end_ms ?? 0;
@@ -98,6 +102,15 @@ export function FlashAnalysisPanel({
       aria-label={analysisReady ? "FlashRisk investigation workspace" : "Selected flash"}
       className={cn("panel px-4 py-4 sm:px-5", className)}
     >
+      {onReturnToReport ? (
+        <button
+          type="button"
+          onClick={onReturnToReport}
+          className="mb-3 inline-flex h-8 items-center rounded-md border border-white/10 bg-white/5 px-2.5 text-[13px] text-foreground/90 transition-colors hover:bg-white/8"
+        >
+          Back to report
+        </button>
+      ) : null}
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <h2 className="text-[10px] font-medium tracking-[0.18em] text-muted-foreground uppercase">
@@ -107,13 +120,13 @@ export function FlashAnalysisPanel({
             <p className="mt-1 truncate text-[13px] text-foreground/85">Flash {flash.flash_id}</p>
           ) : null}
         </div>
-        {flash && onClearSelection ? (
+        {flash && (onReturnToReport || onClearSelection) ? (
           <button
             type="button"
-            onClick={onClearSelection}
+            onClick={onReturnToReport ?? onClearSelection}
             className="-mt-0.5 -mr-1 inline-flex size-6 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-white/6 hover:text-foreground"
-            aria-label={analysisReady ? "Close analysis" : "Clear selected flash"}
-            title={analysisReady ? "Close analysis" : "Clear selection"}
+            aria-label={onReturnToReport ? "Back to report" : analysisReady ? "Close analysis" : "Clear selected flash"}
+            title={onReturnToReport ? "Back to report" : analysisReady ? "Close analysis" : "Clear selection"}
           >
             <X className="size-3.5" aria-hidden />
           </button>
@@ -203,12 +216,13 @@ function AnalyzedWorkspace({
   onReset?: () => void;
   onSeekGlmMs?: (ms: number) => void;
 }) {
-  const [workspaceView, setWorkspaceView] = useState<"analysis" | "lightning">("analysis");
+  const [workspaceView, setWorkspaceView] = useState<"analysis" | "surveillance" | "lightning">("analysis");
 
   return (
     <div className="mt-3 flex flex-col gap-4">
+      <SaveReportButton result={result} flash={flash} />
       <div
-        className="grid grid-cols-2 gap-1 rounded-md border border-white/10 bg-black/25 p-1"
+        className="grid grid-cols-3 gap-1 rounded-md border border-white/10 bg-black/25 p-1"
         role="tablist"
         aria-label="Investigation views"
       >
@@ -217,6 +231,12 @@ function AnalyzedWorkspace({
           onClick={() => setWorkspaceView("analysis")}
         >
           Analysis
+        </WorkspaceTab>
+        <WorkspaceTab
+          selected={workspaceView === "surveillance"}
+          onClick={() => setWorkspaceView("surveillance")}
+        >
+          Surveillance
         </WorkspaceTab>
         <WorkspaceTab
           selected={workspaceView === "lightning"}
@@ -228,6 +248,13 @@ function AnalyzedWorkspace({
 
       {workspaceView === "analysis" ? (
         <AnalysisReport result={result} flash={flash} />
+      ) : workspaceView === "surveillance" ? (
+        <SurveillanceView
+          globalFlashId={result.global_flash_id}
+          latitude={result.flash_lat}
+          longitude={result.flash_lon}
+          flashTimestampUtc={result.flash_timestamp_utc}
+        />
       ) : (
         <LightningDetailView
           flash={flash}

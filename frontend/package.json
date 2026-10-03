@@ -9,10 +9,12 @@
     "prebuild": "npm run copy-maplibre-worker",
     "build": "next build",
     "start": "next start --port 3417",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "node --experimental-strip-types --import ./scripts/register-test-resolver.mjs --test src/lib/multi-flash-selection.test.ts src/lib/multi-flash-report.test.ts src/lib/sentinel-surveillance.test.ts src/lib/flash-locality.test.ts src/lib/individual-report.test.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
+    "@react-pdf/renderer": "^4.9.0",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.4.0",
     "lucide-react": "^1.47.0",

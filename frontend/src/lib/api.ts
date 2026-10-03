@@ -239,3 +239,61 @@ export async function analyzeFlash(
 
   return (await res.json()) as AnalyzeFlashResponse;
 }
+
+export type SentinelBounds = {
+  west: number;
+  south: number;
+  east: number;
+  north: number;
+};
+
+export type SentinelPreview = {
+  status: "available" | "unavailable";
+  flash_lat: number;
+  flash_lon: number;
+  flash_timestamp_utc: string;
+  surveillance_radius_km: number;
+  lookback_days: number;
+  clear_threshold: number;
+  message: string | null;
+  image_png_base64: string | null;
+  image_width: number | null;
+  image_height: number | null;
+  bounds: SentinelBounds | null;
+  acquired_utc: string | null;
+  hours_before_flash: number | null;
+  point_clarity: number | null;
+  scene_cloud_pct: number | null;
+};
+
+export async function fetchSentinelPreview(
+  params: { flashLat: number; flashLon: number; flashTimestampUtc: string },
+  signal?: AbortSignal,
+): Promise<SentinelPreview> {
+  const res = await fetch(`${API_BASE_URL}/api/sentinel/preview`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    signal,
+    cache: "no-store",
+    body: JSON.stringify({
+      flash_lat: params.flashLat,
+      flash_lon: params.flashLon,
+      flash_timestamp_utc: params.flashTimestampUtc,
+    }),
+  });
+
+  if (!res.ok) {
+    let payload: unknown = null;
+    try {
+      payload = await res.json();
+    } catch {
+      payload = null;
+    }
+    throw new ApiError(
+      detailMessage(payload, `Sentinel-2 imagery could not be retrieved (HTTP ${res.status})`),
+      res.status,
+    );
+  }
+
+  return (await res.json()) as SentinelPreview;
+}

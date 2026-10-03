@@ -892,6 +892,9 @@ type CaliforniaMapProps = {
    * selected flash (active investigation / locked search area).
    */
   allowMapLocationPick?: boolean;
+  /** When true, marker highlight follows multiSelectedIds and clicks toggle that set. */
+  multiSelectMode?: boolean;
+  multiSelectedIds?: readonly string[];
   onSelectLocation: (location: LonLat) => void;
   onSelectFlash: (flash: GlmFlash) => void;
   onDeselectFlash: () => void;
@@ -909,6 +912,8 @@ export function CaliforniaMap({
   reconstructionCameraNonce,
   focusNonce,
   allowMapLocationPick = true,
+  multiSelectMode = false,
+  multiSelectedIds = [],
   onSelectLocation,
   onSelectFlash,
   onDeselectFlash,
@@ -1120,8 +1125,10 @@ export function CaliforniaMap({
     }
 
     for (const flash of flashes) {
-      const selected = flash.global_flash_id === selectedFlashId;
-      const dimmed = reconstructionFocus && !selected;
+      const selected = multiSelectMode
+        ? multiSelectedIds.includes(flash.global_flash_id)
+        : flash.global_flash_id === selectedFlashId;
+      const dimmed = !multiSelectMode && reconstructionFocus && !selected;
       let marker = flashMarkersRef.current.get(flash.global_flash_id);
       if (!marker) {
         const element = createFlashMarkerElement(selected, dimmed);
@@ -1147,7 +1154,7 @@ export function CaliforniaMap({
         applyFlashMarkerState(marker.getElement(), selected, dimmed);
       }
     }
-  }, [flashes, selectedFlashId, reconstructionFocus]);
+  }, [flashes, selectedFlashId, reconstructionFocus, multiSelectMode, multiSelectedIds]);
 
   useEffect(() => {
     const map = mapRef.current;

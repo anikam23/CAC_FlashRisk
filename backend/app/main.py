@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import analysis, glm, health
+from app.api.routes import analysis, glm, health, sentinel
 from app.core.config import get_settings
 
 
@@ -17,6 +17,7 @@ def create_app() -> FastAPI:
     app.include_router(health.router, prefix="/api")
     app.include_router(glm.router, prefix="/api")
     app.include_router(analysis.router, prefix="/api")
+    app.include_router(sentinel.router, prefix="/api")
     return app
 
 

@@ -2,18 +2,19 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import {
-  FlashAnalysisPanel,
-  type AnalysisState,
-} from "@/components/analysis/flash-analysis-panel";
+import { FlashAnalysisPanel, type AnalysisState } from "@/components/analysis/flash-analysis-panel";
+import { MultiFlashPanel } from "@/components/analysis/multi-flash-panel";
+import { MultiFlashReport } from "@/components/analysis/multi-flash-report";
 import { CaliforniaMap } from "@/components/map/california-map";
 import { SearchPanel } from "@/components/search/search-panel";
+import { LandingPage } from "@/components/shell/landing-page";
 import { TopBar } from "@/components/shell/top-bar";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   ApiError,
   analyzeFlash,
   fetchFlashReconstruction,
+  fetchSentinelPreview,
   searchGlmFlashes,
   type AnalyzeFlashResponse,
   type GlmFlash,
@@ -27,8 +28,30 @@ import {
 import type { PlaceSuggestion } from "@/lib/california-places";
 import { GLM_PLAYBACK_SLOWDOWN } from "@/lib/flash-playback";
 import {
+  analyzeFlashesSequentially,
+  selectAllReturnedFlashes,
+  toggleFlashSelection,
+  type MultiFlashJob,
+} from "@/lib/multi-flash-selection";
+import {
+  analysisForReportDrillDown,
+  buildReportSources,
+  createReportNav,
+  reportReadyOnMap,
+  isMultiFlashRunFinished,
+  openReportFlash,
+  rankMultiFlashReport,
+  returnReportToMap,
+  returnToReport,
+  showReport,
+  type ReportNav,
+} from "@/lib/multi-flash-report";
+import { loadSentinel, sentinelCacheKey, settleWithSentinel } from "@/lib/sentinel-session";
+import {
   buildLightningSearchRequest,
   createEmptySearchSetup,
+  describeSearchRadius,
+  describeSearchWindow,
   toUtcIsoDatetime,
   type ActiveInvestigation,
   type LightningSearchSetup,
@@ -45,7 +68,17 @@ type PendingGuard =
   | { kind: "find-lightning" }
   | { kind: "change-search-area" }
   | { kind: "close-analysis" }
+  | { kind: "enter-multi-select" }
+  | { kind: "exit-multi" }
   | null;
+
+type CommittedSearch = {
+  label: string;
+  date: string;
+  time: string;
+  windowMinutes: SearchWindowMinutes;
+  radiusKm: SearchRadiusKm;
+};
 
 const ANALYSIS_CLOSE_WARNING =
   "Your current analysis will be closed. Returning to this flash later may require running the analysis again.";
@@ -53,8 +86,19 @@ const ANALYSIS_CLOSE_WARNING =
 const CLOSE_ANALYSIS_WARNING =
   "Closing the analysis will return to the lightning search. Returning to this flash later may require running the analysis again.";
 
+function startSentinelRetrieval(flash: Pick<GlmFlash, "global_flash_id" | "flash_lat" | "flash_lon" | "flash_start_time">) {
+  return loadSentinel(sentinelCacheKey(flash.global_flash_id), () =>
+    fetchSentinelPreview({
+      flashLat: flash.flash_lat,
+      flashLon: flash.flash_lon,
+      flashTimestampUtc: flash.flash_start_time,
+    }),
+  );
+}
+
 export default function Home() {
   const [setup, setSetup] = useState<LightningSearchSetup>(createEmptySearchSetup);
+  const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const [locationText, setLocationText] = useState("");
   const [focusNonce, setFocusNonce] = useState(0);
   const [flashes, setFlashes] = useState<GlmFlash[]>([]);
@@ -75,15 +119,31 @@ export default function Home() {
   const [activeInvestigation, setActiveInvestigation] = useState<ActiveInvestigation | null>(
     null,
   );
+  const [committedSearch, setCommittedSearch] = useState<CommittedSearch | null>(null);
   const [pendingGuard, setPendingGuard] = useState<PendingGuard>(null);
+  const [multiSelectMode, setMultiSelectMode] = useState(false);
+  const [multiSelectedIds, setMultiSelectedIds] = useState<string[]>([]);
+  const [multiJobs, setMultiJobs] = useState<MultiFlashJob[] | null>(null);
+  const [multiResults, setMultiResults] = useState<Record<string, AnalyzeFlashResponse>>({});
+  const [multiRunning, setMultiRunning] = useState(false);
+  const [multiLimitMessage, setMultiLimitMessage] = useState<string | null>(null);
+  const [reportNav, setReportNav] = useState<ReportNav | null>(null);
 
   const searchAbortRef = useRef<AbortController | null>(null);
   const reconstructionAbortRef = useRef<AbortController | null>(null);
   const analysisAbortRef = useRef<AbortController | null>(null);
+  const multiAbortRef = useRef<AbortController | null>(null);
   const selectedFlashIdRef = useRef<string | null>(null);
   const flashesRef = useRef(flashes);
   const reconstructionFocusRef = useRef(false);
   const analysisReadyRef = useRef(false);
+  const multiModeRef = useRef(false);
+  const multiRunningRef = useRef(false);
+  const multiProtectedRef = useRef(false);
+  const multiSelectedRef = useRef<string[]>([]);
+  const multiJobsRef = useRef<MultiFlashJob[] | null>(null);
+  const multiResultsRef = useRef<Record<string, AnalyzeFlashResponse>>({});
+  const reportNavRef = useRef<ReportNav | null>(null);
 
   const selectedFlash =
     flashes.find((flash) => flash.global_flash_id === selectedFlashId) ?? null;
@@ -107,6 +167,18 @@ export default function Home() {
   useEffect(() => {
     analysisReadyRef.current = analysisReady;
   }, [analysisReady]);
+
+  useEffect(() => {
+    multiModeRef.current = multiSelectMode;
+    multiRunningRef.current = multiRunning;
+    multiSelectedRef.current = multiSelectedIds;
+    multiJobsRef.current = multiJobs;
+    multiResultsRef.current = multiResults;
+    reportNavRef.current = reportNav;
+    multiProtectedRef.current =
+      multiRunning ||
+      (multiJobs?.some((job) => job.status === "completed" || job.status === "failed") ?? false);
+  }, [multiSelectMode, multiRunning, multiJobs, multiSelectedIds, multiResults, reportNav]);
 
   // Fetch reconstruction for the current selection. Reset/loading state is set by
   // selection handlers so this effect does not synchronously cascade setState.
@@ -207,6 +279,175 @@ export default function Home() {
     clearSelection();
   };
 
+  const clearMultiSelect = () => {
+    multiAbortRef.current?.abort();
+    multiAbortRef.current = null;
+    multiModeRef.current = false;
+    multiRunningRef.current = false;
+    multiSelectedRef.current = [];
+    multiJobsRef.current = null;
+    multiResultsRef.current = {};
+    reportNavRef.current = null;
+    multiProtectedRef.current = false;
+    setMultiSelectMode(false);
+    setMultiSelectedIds([]);
+    setMultiJobs(null);
+    setMultiResults({});
+    setMultiRunning(false);
+    setMultiLimitMessage(null);
+    setReportNav(null);
+  };
+
+  const beginMultiSelect = () => {
+    clearSelection();
+    multiAbortRef.current?.abort();
+    multiAbortRef.current = null;
+    multiModeRef.current = true;
+    multiRunningRef.current = false;
+    multiSelectedRef.current = [];
+    multiJobsRef.current = null;
+    multiResultsRef.current = {};
+    reportNavRef.current = null;
+    multiProtectedRef.current = false;
+    setMultiSelectMode(true);
+    setMultiSelectedIds([]);
+    setMultiJobs(null);
+    setMultiResults({});
+    setMultiRunning(false);
+    setMultiLimitMessage(null);
+    setReportNav(null);
+  };
+
+  const requestMultiSelect = () => {
+    if (flashesRef.current.length === 0 || multiModeRef.current) return;
+    if (analysisReadyRef.current) {
+      setPendingGuard({ kind: "enter-multi-select" });
+      return;
+    }
+    beginMultiSelect();
+  };
+
+  const toggleMultiFlash = (flash: GlmFlash) => {
+    if (!multiModeRef.current || multiRunningRef.current) return;
+    if (isMultiFlashRunFinished(multiJobsRef.current)) return;
+    const next = toggleFlashSelection(multiSelectedRef.current, flash.global_flash_id);
+    multiSelectedRef.current = next.selectedIds;
+    setMultiLimitMessage(next.atLimit ? "Select up to 10 flashes." : null);
+    setMultiJobs(null);
+    setMultiSelectedIds(next.selectedIds);
+  };
+
+  const selectAllMultiFlashes = () => {
+    if (!multiModeRef.current || multiRunningRef.current) return;
+    if (isMultiFlashRunFinished(multiJobsRef.current)) return;
+    const ids = selectAllReturnedFlashes(flashesRef.current.map((flash) => flash.global_flash_id));
+    if (!ids) return;
+    multiSelectedRef.current = ids;
+    setMultiJobs(null);
+    setMultiLimitMessage(null);
+    setMultiSelectedIds(ids);
+  };
+
+  const runMultiAnalysis = () => {
+    if (!multiModeRef.current || multiRunningRef.current || multiSelectedIds.length === 0) return;
+    if (isMultiFlashRunFinished(multiJobsRef.current)) return;
+    const ids = [...multiSelectedIds];
+    multiAbortRef.current?.abort();
+    const controller = new AbortController();
+    multiAbortRef.current = controller;
+    multiRunningRef.current = true;
+    multiProtectedRef.current = true;
+    setMultiRunning(true);
+    setMultiResults({});
+    multiResultsRef.current = {};
+    void analyzeFlashesSequentially(
+      ids,
+      async (globalFlashId, signal) => {
+        const flash = flashesRef.current.find((item) => item.global_flash_id === globalFlashId);
+        if (!flash) throw new Error("Selected flash is no longer in the search results.");
+        const data = await settleWithSentinel(
+          analyzeFlash(flash.source_file, flash.flash_id, signal),
+          startSentinelRetrieval(flash),
+        );
+        multiResultsRef.current = { ...multiResultsRef.current, [globalFlashId]: data };
+        setMultiResults(multiResultsRef.current);
+        return { modelScore: data.model_score };
+      },
+      (jobs) => {
+        if (multiAbortRef.current !== controller) return;
+        multiJobsRef.current = jobs;
+        multiProtectedRef.current =
+          multiRunningRef.current ||
+          jobs.some((job) => job.status === "completed" || job.status === "failed");
+        setMultiJobs(jobs);
+      },
+      controller.signal,
+    ).then((jobs) => {
+      if (multiAbortRef.current !== controller) return;
+      if (isMultiFlashRunFinished(jobs)) {
+        const nav = reportReadyOnMap();
+        reportNavRef.current = nav;
+        setReportNav(nav);
+      }
+    }).finally(() => {
+      if (multiAbortRef.current !== controller) return;
+      multiRunningRef.current = false;
+      setMultiRunning(false);
+    });
+  };
+
+  const openReportFlashDetail = (globalFlashId: string) => {
+    const job = multiJobsRef.current?.find((item) => item.globalFlashId === globalFlashId);
+    const stored = analysisForReportDrillDown(
+      multiResultsRef.current[globalFlashId],
+      job?.status === "completed" ? "completed" : "failed",
+      multiResultsRef.current[globalFlashId]?.model_score ?? null,
+    );
+    const flash = flashesRef.current.find((item) => item.global_flash_id === globalFlashId);
+    if (!stored || !flash || !reportNavRef.current) return;
+    void startSentinelRetrieval(flash);
+    const nav = openReportFlash(reportNavRef.current, globalFlashId, true);
+    reportNavRef.current = nav;
+    setReportNav(nav);
+    applyFlashSelection(flash);
+    setAnalysisResult(stored);
+    setAnalysisState("ready");
+  };
+
+  const backToMultiFlashReport = () => {
+    if (!reportNavRef.current) return;
+    clearSelection();
+    const nav = returnToReport(reportNavRef.current);
+    reportNavRef.current = nav;
+    setReportNav(nav);
+  };
+
+  const backToMapFromReport = () => {
+    if (!reportNavRef.current) return;
+    clearSelection();
+    const nav = returnReportToMap(reportNavRef.current);
+    reportNavRef.current = nav;
+    setReportNav(nav);
+  };
+
+  const viewMultiFlashReport = () => {
+    const nav = reportNavRef.current ? showReport(reportNavRef.current) : createReportNav();
+    reportNavRef.current = nav;
+    setReportNav(nav);
+  };
+
+  const requestExitMultiSelect = () => {
+    if (multiRunningRef.current) {
+      clearMultiSelect();
+      return;
+    }
+    if (reportNavRef.current || isMultiFlashRunFinished(multiJobsRef.current)) {
+      setPendingGuard({ kind: "exit-multi" });
+      return;
+    }
+    clearMultiSelect();
+  };
+
   const applyFlashSelection = (flash: GlmFlash) => {
     reconstructionAbortRef.current?.abort();
     clearAnalysis();
@@ -220,6 +461,11 @@ export default function Home() {
   };
 
   const selectFlash = (flash: GlmFlash) => {
+    if (reportNavRef.current?.view === "flash") return;
+    if (multiModeRef.current) {
+      toggleMultiFlash(flash);
+      return;
+    }
     if (flash.global_flash_id === selectedFlashIdRef.current) return;
     if (analysisReadyRef.current) {
       setPendingGuard({ kind: "switch-flash", flash });
@@ -241,7 +487,10 @@ export default function Home() {
     setAnalysisResult(null);
     setAnalysisError(null);
 
-    void analyzeFlash(flash.source_file, flash.flash_id, controller.signal)
+    void settleWithSentinel(
+      analyzeFlash(flash.source_file, flash.flash_id, controller.signal),
+      startSentinelRetrieval(flash),
+    )
       .then((data) => {
         if (controller.signal.aborted) return;
         if (selectedFlashIdRef.current !== requestId) return;
@@ -341,6 +590,7 @@ export default function Home() {
 
     searchAbortRef.current?.abort();
     reconstructionAbortRef.current?.abort();
+    clearMultiSelect();
     const controller = new AbortController();
     searchAbortRef.current = controller;
 
@@ -369,6 +619,13 @@ export default function Home() {
           location: setup.location,
           radiusKm: request.radiusKm,
         });
+        setCommittedSearch({
+          label: request.label,
+          date: request.date,
+          time: request.time,
+          windowMinutes: request.windowMinutes,
+          radiusKm: request.radiusKm,
+        });
       }
 
       setFlashes(result.flashes);
@@ -389,6 +646,7 @@ export default function Home() {
       // Failed search should not invent results; clear investigation so map
       // configuration is available again for retry.
       setActiveInvestigation(null);
+      setCommittedSearch(null);
       if (error instanceof ApiError) {
         setStatusMessage(error.message);
       } else if (error instanceof Error) {
@@ -403,7 +661,7 @@ export default function Home() {
 
   const handleFindLightning = () => {
     if (searching) return;
-    if (analysisReady) {
+    if (analysisReady || multiProtectedRef.current) {
       setPendingGuard({ kind: "find-lightning" });
       return;
     }
@@ -413,14 +671,16 @@ export default function Home() {
   const beginChangeSearchArea = () => {
     searchAbortRef.current?.abort();
     clearSelection();
+    clearMultiSelect();
     setFlashes([]);
     setActiveInvestigation(null);
+    setCommittedSearch(null);
     setStatusMessage("Choose a new search location and radius, then find lightning.");
   };
 
   const handleChangeSearchArea = () => {
     if (searching) return;
-    if (analysisReady) {
+    if (analysisReady || multiProtectedRef.current) {
       setPendingGuard({ kind: "change-search-area" });
       return;
     }
@@ -448,6 +708,14 @@ export default function Home() {
     }
     if (pending.kind === "close-analysis") {
       clearSelection();
+      return;
+    }
+    if (pending.kind === "enter-multi-select") {
+      beginMultiSelect();
+      return;
+    }
+    if (pending.kind === "exit-multi") {
+      clearMultiSelect();
     }
   };
 
@@ -460,12 +728,18 @@ export default function Home() {
           ? "Change search area?"
           : pendingGuard?.kind === "close-analysis"
             ? "Close analysis?"
-            : "";
+            : pendingGuard?.kind === "enter-multi-select"
+              ? "Start multi-flash selection?"
+              : pendingGuard?.kind === "exit-multi"
+                ? "Leave the multi-flash report?"
+                : "";
 
   const guardDescription =
     pendingGuard?.kind === "close-analysis"
       ? CLOSE_ANALYSIS_WARNING
-      : ANALYSIS_CLOSE_WARNING;
+      : pendingGuard?.kind === "exit-multi"
+        ? "The multi-flash report will close. The lightning search stays on the map."
+        : ANALYSIS_CLOSE_WARNING;
 
   const guardConfirmLabel =
     pendingGuard?.kind === "switch-flash"
@@ -476,14 +750,51 @@ export default function Home() {
           ? "Change Search Area"
           : pendingGuard?.kind === "close-analysis"
             ? "Close Analysis"
-            : "Continue";
+            : pendingGuard?.kind === "enter-multi-select"
+              ? "Select Multiple"
+              : pendingGuard?.kind === "exit-multi"
+                ? "Exit Report"
+                : "Continue";
 
   const guardCancelLabel =
-    pendingGuard?.kind === "close-analysis" ? "Keep Analysis" : "Keep Current Analysis";
+    pendingGuard?.kind === "close-analysis"
+      ? "Keep Analysis"
+      : pendingGuard?.kind === "exit-multi"
+        ? "Keep Report"
+        : "Keep Current Analysis";
+
+  const reportFinished = isMultiFlashRunFinished(multiJobs);
+  const reportRows = reportFinished
+    ? rankMultiFlashReport(
+        buildReportSources(
+          multiJobs ?? [],
+          flashes,
+          Object.fromEntries(
+            Object.entries(multiResults).map(([id, result]) => [
+              id,
+              {
+                modelScore: result.model_score,
+                flashTimestampUtc: result.flash_timestamp_utc,
+                featureValues: result.feature_values,
+              },
+            ]),
+          ),
+        ),
+      )
+    : [];
+  const analyzedCount = reportRows.filter((row) => row.rank !== null).length;
+  const failedCount = reportRows.length - analyzedCount;
+  const reportSearchLabel = committedSearch
+    ? `${committedSearch.date} ${committedSearch.time} UTC · ${describeSearchWindow(committedSearch.windowMinutes)} window · ${describeSearchRadius(committedSearch.radiusKm)} radius`
+    : "";
+
+  if (!workspaceOpen) {
+    return <LandingPage onEnter={() => setWorkspaceOpen(true)} />;
+  }
 
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-background">
-      <TopBar />
+      <TopBar onHome={() => setWorkspaceOpen(false)} />
       <main className="relative min-h-0 flex-1">
         <CaliforniaMap
           selectedLocation={mapLocation}
@@ -497,6 +808,8 @@ export default function Home() {
           reconstructionCameraNonce={reconstructionCameraNonce}
           focusNonce={focusNonce}
           allowMapLocationPick={!investigationActive}
+          multiSelectMode={multiSelectMode && reportNav?.view !== "flash"}
+          multiSelectedIds={multiSelectedIds}
           onSelectLocation={handleMapSelect}
           onSelectFlash={selectFlash}
           onDeselectFlash={requestClearSelection}
@@ -521,7 +834,64 @@ export default function Home() {
             }}
             onFindLightning={handleFindLightning}
             onChangeSearchArea={handleChangeSearchArea}
+            flashCount={flashes.length}
+            multiSelectMode={multiSelectMode}
+            onEnterMultiSelect={requestMultiSelect}
           />
+          {reportNav?.view === "report" ? (
+            <MultiFlashReport
+              provenance={
+                committedSearch
+                  ? `${committedSearch.label} · ${reportSearchLabel}`
+                  : ""
+              }
+              rows={reportRows}
+              flashes={flashes}
+              results={multiResults}
+              onOpenFlash={openReportFlashDetail}
+              onBackToMap={backToMapFromReport}
+            />
+          ) : reportNav?.view === "flash" ? (
+            <FlashAnalysisPanel
+              className="pointer-events-auto absolute right-4 bottom-4 left-4 max-h-[calc(100%-8.75rem)] overflow-y-auto xl:top-4 xl:right-4 xl:bottom-auto xl:left-auto xl:max-h-[calc(100%-2rem)] xl:w-[min(38rem,calc(100%-22rem))] 2xl:w-[min(42rem,calc(100%-23rem))]"
+              flash={selectedFlash}
+              reconstruction={reconstruction}
+              reconstructionState={reconstructionState}
+              reconstructionError={reconstructionError}
+              analysisState={analysisState}
+              analysisResult={analysisResult}
+              analysisError={analysisError}
+              playbackGlmMs={playbackGlmMs}
+              playing={playing}
+              reconstructionActive={reconstructionFocus}
+              onReturnToReport={backToMultiFlashReport}
+              onPlay={() => beginReconstructionPlayback(false)}
+              onPause={() => setPlaying(false)}
+              onReplay={() => beginReconstructionPlayback(true)}
+              onReset={resetReconstructionView}
+              onSeekGlmMs={(ms) => {
+                setPlaybackGlmMs(ms);
+                setPlaying(false);
+              }}
+            />
+          ) : multiSelectMode ? (
+            <MultiFlashPanel
+              className="pointer-events-auto absolute right-4 bottom-4 left-4 max-h-[calc(100%-8.75rem)] overflow-y-auto xl:top-4 xl:right-4 xl:bottom-auto xl:left-auto xl:max-h-[calc(100%-2rem)] xl:w-[min(28rem,calc(100%-22rem))]"
+              flashes={flashes}
+              selectedIds={multiSelectedIds}
+              jobs={multiJobs}
+              running={multiRunning}
+              limitMessage={multiLimitMessage}
+              reportReady={reportFinished}
+              analyzedCount={analyzedCount}
+              failedCount={failedCount}
+              onToggle={toggleMultiFlash}
+              onSelectAll={selectAllMultiFlashes}
+              onAnalyze={runMultiAnalysis}
+              onViewReport={viewMultiFlashReport}
+              onExit={requestExitMultiSelect}
+            />
+          ) : (
           <FlashAnalysisPanel
             className={cn(
               "pointer-events-auto absolute right-4 bottom-4 left-4 max-h-[calc(100%-8.75rem)] overflow-y-auto xl:top-4 xl:right-4 xl:bottom-auto xl:left-auto xl:max-h-[calc(100%-2rem)]",
@@ -550,6 +920,7 @@ export default function Home() {
               setPlaying(false);
             }}
           />
+          )}
         </div>
         <ConfirmDialog
           open={pendingGuard !== null}
