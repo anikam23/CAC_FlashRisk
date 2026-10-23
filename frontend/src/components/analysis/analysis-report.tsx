@@ -10,6 +10,7 @@ import {
   primaryEnvironmentSections,
   scoreMarkerPercent,
   secondaryFeatureSections,
+  toFlashRiskScore,
   type SectionFeatureRow,
 } from "@/lib/analysis-display";
 import { cn } from "cn";
@@ -34,6 +35,8 @@ type AnalysisReportProps = {
 export function AnalysisReport({ result, flash }: AnalysisReportProps) {
   const scoreId = useId();
   const displayScore = formatFlashRiskScore(result.model_score);
+  const flashRiskScore = toFlashRiskScore(result.model_score);
+  const elevatedPriority = Number.isFinite(flashRiskScore) && flashRiskScore >= 50;
   const markerPct = scoreMarkerPercent(result.model_score);
   const primary = primaryEnvironmentSections(result.feature_names, result.feature_values);
   const secondary = secondaryFeatureSections(result.feature_names, result.feature_values);
@@ -68,6 +71,11 @@ export function AnalysisReport({ result, flash }: AnalysisReportProps) {
               </p>
               <span className="mb-1.5 text-[13px] text-muted-foreground">/ 100</span>
             </div>
+            {elevatedPriority ? (
+              <span className="mt-2 inline-flex rounded-sm border border-amber-400/25 bg-amber-400/10 px-1.5 py-0.5 text-[10px] font-medium tracking-wide text-amber-200/90">
+                Elevated Surveillance Priority
+              </span>
+            ) : null}
             <p className="mt-2 max-w-md text-[12.5px] leading-snug text-muted-foreground/90">
               Model-generated ignition surveillance priority. Higher scores indicate flashes the
               model identifies for greater ignition surveillance priority.
