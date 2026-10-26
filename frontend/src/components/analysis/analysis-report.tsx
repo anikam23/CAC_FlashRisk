@@ -1,7 +1,6 @@
 "use client";
 
-import { useId, useState, type ReactNode } from "react";
-import { ChevronDown } from "lucide-react";
+import { useId } from "react";
 
 import type { AnalyzeFlashResponse, GlmFlash } from "@/lib/api";
 import {
@@ -9,7 +8,6 @@ import {
   formatFlashRiskScore,
   primaryEnvironmentSections,
   scoreMarkerPercent,
-  secondaryFeatureSections,
   toFlashRiskScore,
   type SectionFeatureRow,
 } from "@/lib/analysis-display";
@@ -39,7 +37,6 @@ export function AnalysisReport({ result, flash }: AnalysisReportProps) {
   const elevatedPriority = Number.isFinite(flashRiskScore) && flashRiskScore >= 50;
   const markerPct = scoreMarkerPercent(result.model_score);
   const primary = primaryEnvironmentSections(result.feature_names, result.feature_values);
-  const secondary = secondaryFeatureSections(result.feature_names, result.feature_values);
   const timestamp = result.flash_timestamp_utc || flash.flash_start_time;
 
   return (
@@ -76,10 +73,6 @@ export function AnalysisReport({ result, flash }: AnalysisReportProps) {
                 Elevated Surveillance Priority
               </span>
             ) : null}
-            <p className="mt-2 max-w-md text-[12.5px] leading-snug text-muted-foreground/90">
-              Model-generated ignition surveillance priority. Higher scores indicate flashes the
-              model identifies for greater ignition surveillance priority.
-            </p>
             <div className="mt-3.5 max-w-sm">
               <ScoreScale markerPercent={markerPct} scoreLabel={displayScore} />
             </div>
@@ -120,43 +113,15 @@ export function AnalysisReport({ result, flash }: AnalysisReportProps) {
               key={section.id}
               emoji={section.emoji}
               title={section.title}
-              blurb={section.blurb}
+              blurb={
+                section.id === "vegetation"
+                  ? "Greenness and vegetation water signals from MODIS, range from -1 to +1, higher values correspond to greener vegetation and greater moisture"
+                  : section.blurb
+              }
               rows={rows}
-              sectionId={section.id}
             />
           ))}
         </div>
-      </div>
-
-      <div className="space-y-2">
-        {secondary.map(({ section, rows }) => (
-          <CollapsibleBlock
-            key={section.id}
-            title={`${section.emoji} ${section.title}`}
-            subtitle={section.blurb}
-          >
-            {section.id === "seasonality" ? (
-              <div className="space-y-2.5">
-                <p className="text-[13px] leading-snug text-muted-foreground/85">
-                  These sine and cosine values encode the flash’s time of year as a continuous
-                  annual cycle so the model can use seasonality without calendar discontinuities.
-                  They are technical model variables, not direct environmental measurements.
-                </p>
-                <dl className="grid gap-x-4 gap-y-1.5 sm:grid-cols-2">
-                  {rows.map((row) => (
-                    <ValueRow key={row.name} row={row} technical />
-                  ))}
-                </dl>
-              </div>
-            ) : (
-              <dl className="grid gap-x-4 gap-y-1.5 sm:grid-cols-2">
-                {rows.map((row) => (
-                  <ValueRow key={row.name} row={row} />
-                ))}
-              </dl>
-            )}
-          </CollapsibleBlock>
-        ))}
       </div>
     </section>
   );
@@ -167,13 +132,11 @@ function ConditionGroup({
   title,
   blurb,
   rows,
-  sectionId,
 }: {
   emoji: string;
   title: string;
   blurb: string;
   rows: SectionFeatureRow[];
-  sectionId: string;
 }) {
   return (
     <div className="rounded-md border border-white/8 bg-black/22 px-3 py-2.5">
@@ -186,12 +149,6 @@ function ConditionGroup({
           <p className="text-[11.5px] leading-snug text-muted-foreground/75">{blurb}</p>
         </div>
       </div>
-      {sectionId === "vegetation" ? (
-        <p className="mb-2 text-[11.5px] leading-snug text-muted-foreground/70">
-          NDVI and NDWI each range from −1 to +1. Higher NDVI generally corresponds to greener
-          vegetation; higher NDWI generally corresponds to a stronger vegetation moisture signal.
-        </p>
-      ) : null}
       <dl className="space-y-1.5 border-t border-white/6 pt-2">
         {rows.map((row) => (
           <ValueRow key={row.name} row={row} showHint />
@@ -236,43 +193,6 @@ function ValueRow({
           <span className="ml-1 text-[11px] text-muted-foreground/70">{row.unit}</span>
         ) : null}
       </dd>
-    </div>
-  );
-}
-
-function CollapsibleBlock({
-  title,
-  subtitle,
-  children,
-  defaultOpen = false,
-}: {
-  title: string;
-  subtitle: string;
-  children: ReactNode;
-  defaultOpen?: boolean;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <div className="rounded-md border border-white/8 bg-black/15">
-      <button
-        type="button"
-        className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left transition-colors hover:bg-white/[0.03]"
-        aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
-      >
-        <span className="min-w-0">
-          <span className="block text-[13px] font-medium text-foreground/90">{title}</span>
-          <span className="mt-0.5 block text-[11.5px] text-muted-foreground/75">{subtitle}</span>
-        </span>
-        <ChevronDown
-          className={cn(
-            "size-4 shrink-0 text-muted-foreground transition-transform duration-200",
-            open && "rotate-180",
-          )}
-          aria-hidden
-        />
-      </button>
-      {open ? <div className="border-t border-white/8 px-3 py-2.5">{children}</div> : null}
     </div>
   );
 }

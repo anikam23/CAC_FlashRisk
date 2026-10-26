@@ -7,8 +7,6 @@ import { Button } from "@/components/ui/button";
 import { searchLocalPlaces, type PlaceSuggestion } from "@/lib/california-places";
 import { searchRemoteCaliforniaPlaces } from "@/lib/places";
 import {
-  describeSearchRadius,
-  describeSearchWindow,
   glmSearchDateBounds,
   isDateWithinGlmBounds,
   isSearchSetupReady,
@@ -17,7 +15,6 @@ import {
   type LightningSearchSetup,
   type SearchRadiusKm,
   type SearchWindowMinutes,
-  type SelectedSearchLocation,
 } from "@/lib/search";
 import { cn } from "cn";
 
@@ -270,11 +267,11 @@ export function SearchPanel({
             </ul>
           )}
         </div>
-        <p className="text-[12px] leading-snug text-muted-foreground/80">
-          {areaLocked
-            ? "Change date, time, window, or radius, then Update Search to search this area again. Use Change Search Area to pick a different location."
-            : "Search California places or click the map to set a location."}
-        </p>
+        {!areaLocked ? (
+          <p className="text-[12px] leading-snug text-muted-foreground/80">
+            Search California places or click the map to set a location.
+          </p>
+        ) : null}
         {showValidation && missingLocation && (
           <p className="text-[12px] text-amber-200/80">Choose a California location.</p>
         )}
@@ -395,14 +392,6 @@ export function SearchPanel({
         </div>
       </fieldset>
 
-      <SearchSetupSummary
-        location={setup.location}
-        date={setup.date}
-        time={setup.time}
-        windowMinutes={setup.windowMinutes}
-        radiusKm={setup.radiusKm}
-      />
-
       <div className="flex flex-col gap-2.5 border-t border-white/8 pt-4">
         <Button
           type="submit"
@@ -474,49 +463,5 @@ export function SearchPanel({
         </p>
       </div>
     </form>
-  );
-}
-
-function SearchSetupSummary({
-  location,
-  date,
-  time,
-  windowMinutes,
-  radiusKm,
-}: {
-  location: SelectedSearchLocation | null;
-  date: string;
-  time: string;
-  windowMinutes: SearchWindowMinutes;
-  radiusKm: SearchRadiusKm;
-}) {
-  return (
-    <div className="rounded-md border border-white/8 bg-black/20 px-3 py-2.5">
-      <p className="text-[10px] font-medium tracking-[0.16em] text-muted-foreground uppercase">
-        Search setup
-      </p>
-      <dl className="mt-2 space-y-1.5 text-[13px]">
-        <div className="flex items-start justify-between gap-3">
-          <dt className="text-muted-foreground">Location</dt>
-          <dd className="max-w-[12rem] truncate text-right text-foreground/90">
-            {location?.label ?? "Not set"}
-          </dd>
-        </div>
-        <div className="flex items-start justify-between gap-3">
-          <dt className="text-muted-foreground">When (UTC)</dt>
-          <dd className="text-right text-foreground/90">
-            {date && time ? `${date} · ${time}` : "Not set"}
-          </dd>
-        </div>
-        <div className="flex items-start justify-between gap-3">
-          <dt className="text-muted-foreground">Window</dt>
-          <dd className="text-right text-foreground/90">{describeSearchWindow(windowMinutes)}</dd>
-        </div>
-        <div className="flex items-start justify-between gap-3">
-          <dt className="text-muted-foreground">Radius</dt>
-          <dd className="text-right text-foreground/90">{describeSearchRadius(radiusKm)}</dd>
-        </div>
-      </dl>
-    </div>
   );
 }

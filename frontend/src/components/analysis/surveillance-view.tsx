@@ -12,7 +12,6 @@ import {
   circleRingLngLat,
   formatAcquisitionUtc,
   formatClarity,
-  formatImageryAge,
   formatSceneCloud,
   projectToImage,
 } from "@/lib/sentinel-display";
@@ -206,8 +205,6 @@ function AvailableScene({
 }) {
   const radiusKm = result.surveillance_radius_km;
   const acquired = result.acquired_utc ? formatAcquisitionUtc(result.acquired_utc) : "—";
-  const age =
-    result.hours_before_flash === null ? null : formatImageryAge(result.hours_before_flash);
   const clarity = formatClarity(result.point_clarity);
   const cloud = formatSceneCloud(result.scene_cloud_pct);
   const provenance = [
@@ -287,16 +284,15 @@ function AvailableScene({
 
       <dl className="grid grid-cols-2 gap-x-4 gap-y-2.5 text-[13px]">
         <Meta label="Acquisition" value={acquired} />
-        <Meta label="Timing" value={age ? `Pre-flash · ${age}` : "Pre-flash"} />
+        <div className="min-w-0">
+          <p className="text-[12.5px] text-foreground/80">Clear pre-flash scene</p>
+          {provenance ? (
+            <p className="mt-0.5 text-[11px] text-muted-foreground/65">{provenance}</p>
+          ) : null}
+        </div>
         <Meta label="Surveillance radius" value={`${radiusKm} km`} />
         <Meta label="Flash coordinates" value={formatCoord(latitude, longitude)} />
       </dl>
-      <div>
-        <p className="text-[12.5px] text-foreground/80">Clear pre-flash scene</p>
-        {provenance ? (
-          <p className="mt-0.5 text-[11px] text-muted-foreground/65">{provenance}</p>
-        ) : null}
-      </div>
     </div>
   );
 }
